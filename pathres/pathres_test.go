@@ -1,6 +1,7 @@
 package pathres
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -18,14 +19,11 @@ func TestGetProcInfo(t *testing.T) {
 		t.Fatalf("Getgroups() failed: %v", err)
 	}
 
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Getwd() failed: %v", err)
-	}
+	mypid := os.Getpid()
 
 	want := &procInfo{
-		root: "/",
-		cwd:  cwd,
+		root: fmt.Sprintf("/proc/%d/root", mypid),
+		cwd:  fmt.Sprintf("/proc/%d/cwd", mypid),
 		uid:  os.Geteuid(),
 		gid:  os.Getegid(),
 		sgid: groups,

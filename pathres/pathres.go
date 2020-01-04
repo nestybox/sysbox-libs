@@ -207,9 +207,11 @@ func procPathAccess(proc *procInfo, path string, mode AccessMode) error {
 			return syscall.ENOTDIR
 		}
 
-		if symlink {
-			// Follow the symlink; may recurse if symlink points to another symlink and so
-			// on; we stop at symlinkMax recursions (just as the Linux kernel does)
+		// Follow the symlink (unless it's the proc.root); may recurse if symlink points to
+		// another symlink and so on; we stop at symlinkMax recursions (just as the Linux
+		// kernel does)
+
+		if symlink && cur != proc.root {
 			for {
 				if linkCnt >= symlinkMax {
 					return syscall.ELOOP
@@ -227,7 +229,6 @@ func procPathAccess(proc *procInfo, path string, mode AccessMode) error {
 				}
 				linkCnt += 1
 			}
-
 			fi, err := os.Stat(cur)
 			if err != nil {
 				return syscall.ENOENT
@@ -330,6 +331,9 @@ func getProcInfo(pid int) (*procInfo, error) {
 	str = strings.TrimSpace(str)
 	groups := strings.Split(str, " ")
 	for _, g := range groups {
+		if g == "" {
+			continue
+		}
 		val, err := strconv.Atoi(g)
 		if err != nil {
 			return nil, err
@@ -344,19 +348,9 @@ func getProcInfo(pid int) (*procInfo, error) {
 		return nil, fmt.Errorf("invalid cap status")
 	}
 
-	// process root
-	filename := fmt.Sprintf("/proc/%d/root", pid)
-	root, err := os.Readlink(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	// process cwd
-	filename = fmt.Sprintf("/proc/%d/cwd", pid)
-	cwd, err := os.Readlink(filename)
-	if err != nil {
-		return nil, err
-	}
+	// process root & cwd
+	root := fmt.Sprintf("/proc/%d/root", pid)
+	cwd := fmt.Sprintf("/proc/%d/cwd", pid)
 
 	pi := &procInfo{
 		root: root,
