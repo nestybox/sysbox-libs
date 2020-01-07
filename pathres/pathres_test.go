@@ -196,7 +196,7 @@ func TestCheckPermCapDacOverride(t *testing.T) {
 		cwd:  tmpDir,
 		uid:  800,
 		gid:  800,
-		cap:  unix.CAP_DAC_OVERRIDE,
+		cap:  1 << unix.CAP_DAC_OVERRIDE,
 	}
 
 	mode := R_OK | W_OK | X_OK
@@ -247,7 +247,7 @@ func TestCheckPermCapDacReadSearch(t *testing.T) {
 		cwd:  tmpDir,
 		uid:  800,
 		gid:  800,
-		cap:  unix.CAP_DAC_READ_SEARCH,
+		cap:  1 << unix.CAP_DAC_READ_SEARCH,
 	}
 
 	mode := R_OK
@@ -514,9 +514,9 @@ func TestProcPathAccessSymlink(t *testing.T) {
 	// │   └── path
 	// │       ├── again
 	// │       │   └── link4 -> ../../path/link3
-	// │       └── link3 -> /tmp/TestPathres/link2
-	// ├── link -> /tmp/TestPathres/this/is/the/real/path
-	// ├── link2 -> /tmp/TestPathres/link
+	// │       └── link3 -> /link2
+	// ├── link -> /this/is/the/real/path
+	// ├── link2 -> /link
 	// └── this
 	//     └── is
 	//         └── the
@@ -535,16 +535,15 @@ func TestProcPathAccessSymlink(t *testing.T) {
 		t.Fatalf("failed to create test path: %v", err)
 	}
 
-	old := filepath.Join(tmpDir, "/this/is/the/real/path")
+	old := "/this/is/the/real/path"
 	new := filepath.Join(tmpDir, "/link")
 	if err := os.Symlink(old, new); err != nil {
 		t.Fatalf("failed to create test path: %v", err)
 	}
 
-	cwd := tmpDir
 	pi := &procInfo{
 		root: tmpDir,
-		cwd:  cwd,
+		cwd:  tmpDir,
 		uid:  os.Geteuid(),
 		gid:  os.Getegid(),
 	}
@@ -560,7 +559,7 @@ func TestProcPathAccessSymlink(t *testing.T) {
 	}
 
 	// test recursive symlinks
-	old = filepath.Join(tmpDir, "/link")
+	old = "/link"
 	new = filepath.Join(tmpDir, "/link2")
 	if err := os.Symlink(old, new); err != nil {
 		t.Fatalf("failed to create test path: %v", err)
@@ -576,7 +575,7 @@ func TestProcPathAccessSymlink(t *testing.T) {
 		t.Fatalf("failed to create test path: %v", err)
 	}
 
-	old = filepath.Join(tmpDir, "/link2")
+	old = "/link2"
 	new = filepath.Join(tmpDir, "/another/path/link3")
 	if err := os.Symlink(old, new); err != nil {
 		t.Fatalf("failed to create test path: %v", err)
@@ -669,6 +668,34 @@ func TestPathAccess(t *testing.T) {
 		t.Fatalf("PathAccess() failed: %v", err)
 	}
 
+	// relative paths
+
+	testCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed on os.Getwd(): %v", err)
+	}
+
+	if err := os.Chdir(filepath.Join(tmpDir, "/some/path")); err != nil {
+		t.Fatalf("failed on os.Chdir(): %v", err)
+	}
+
+	path = "to/a/dir/somefile"
+	if err := PathAccess(mypid, path, R_OK|W_OK); err != nil {
+		t.Fatalf("PathAccess() failed: %v", err)
+	}
+
+	if err := os.Chdir(filepath.Join(tmpDir, "/some/path/to")); err != nil {
+		t.Fatalf("failed on os.Chdir(): %v", err)
+	}
+
+	path = "a/dir"
+	if err := PathAccess(mypid, path, R_OK|X_OK); err != nil {
+		t.Fatalf("PathAccess() failed: %v", err)
+	}
+
+	if err := os.Chdir(testCwd); err != nil {
+		t.Fatalf("failed on os.Chdir(): %v", err)
+	}
 }
 
 func TestPathAccessPerm(t *testing.T) {
@@ -781,6 +808,8 @@ func TestPathAccessSymlink(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
+	// test absolute symlink
+
 	link := filepath.Join(tmpDir, "/link")
 	if err := os.Symlink(filename, link); err != nil {
 		t.Fatalf("failed to create test path: %v", err)
@@ -789,6 +818,27 @@ func TestPathAccessSymlink(t *testing.T) {
 	if err := PathAccess(mypid, link, R_OK|W_OK); err != nil {
 		t.Fatalf("PathAccess() failed: %v", err)
 	}
+
+	// test relative symlink
+
+	testCwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed on os.Getwd(): %v", err)
+	}
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("failed on os.Chdir(): %v", err)
+	}
+
+	if err := PathAccess(mypid, "link", R_OK|W_OK); err != nil {
+		t.Fatalf("PathAccess() failed: %v", err)
+	}
+
+	if err := os.Chdir(testCwd); err != nil {
+		t.Fatalf("failed on os.Chdir(): %v", err)
+	}
+
+	// negative test on file perm
 
 	if err := PathAccess(mypid, filename, X_OK); err != syscall.EACCES {
 		t.Fatalf("PathAccess() expected to fail with \"%s\" but did not; err = \"%s\"", syscall.EACCES, err)

@@ -3,9 +3,7 @@
 // rules in Linux's path_resolution(7) man page. The caller is assumed to have permissions
 // to make all the necessary path checks.
 
-// TODO
-//
-// * Check if uid 0 bypasses capability checks
+// TODO:
 // * Consider adding ACL support
 
 package pathres
@@ -45,13 +43,13 @@ const (
 )
 
 // isSymlink returns true if the given file is a symlink
-func isSymlink(path string) (bool, error) {
+func isSymlink(path string) (bool, bool, error) {
 	fi, err := os.Lstat(path)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 
-	return fi.Mode()&os.ModeSymlink == os.ModeSymlink, nil
+	return fi.Mode()&os.ModeSymlink == os.ModeSymlink, fi.IsDir(), nil
 }
 
 // intSliceContains returns true if x is in a
@@ -64,13 +62,20 @@ func intSliceContains(a []int, x int) bool {
 	return false
 }
 
+// isCapSet verifies is a given capability is set
+func isCapSet(caps uint64, which int) bool {
+	if which > 63 {
+		return false
+	}
+	return caps&(1<<which) == (1 << which)
+}
+
 // checkPerm checks if the given process has permission to access the file or directory at
 // the given path. The access mode indicates what type of access is being checked (i.e.,
 // read, write, execute, or a combination of these). The given path must not be a symlink.
 // Returns true if the given process has the required permission, false otherwise. The
 // returned error indicates if an error occurred during the check.
 func checkPerm(proc *procInfo, path string, aMode AccessMode) (bool, error) {
-
 	fi, err := os.Stat(path)
 	if err != nil {
 		return false, err
@@ -111,7 +116,7 @@ func checkPerm(proc *procInfo, path string, aMode AccessMode) (bool, error) {
 	}
 
 	// capability checks
-	if (proc.cap & unix.CAP_DAC_OVERRIDE) == unix.CAP_DAC_OVERRIDE {
+	if isCapSet(proc.cap, unix.CAP_DAC_OVERRIDE) {
 		// Per capabilities(7): CAP_DAC_OVERRIDE bypasses file read, write, and execute
 		// permission checks.
 		//
@@ -132,7 +137,7 @@ func checkPerm(proc *procInfo, path string, aMode AccessMode) (bool, error) {
 		}
 	}
 
-	if (proc.cap & unix.CAP_DAC_READ_SEARCH) == unix.CAP_DAC_READ_SEARCH {
+	if isCapSet(proc.cap, unix.CAP_DAC_READ_SEARCH) {
 		// Per capabilities(7): CAP_DAC_READ_SEARCH bypasses file read permission checks and
 		// directory read and execute permission checks
 		if fi.IsDir() && (aMode&W_OK != W_OK) {
@@ -174,7 +179,6 @@ func procPathAccess(proc *procInfo, path string, mode AccessMode) error {
 	final := false
 
 	for i, c := range components {
-
 		if i == len(components)-1 {
 			final = true
 		}
@@ -193,17 +197,12 @@ func procPathAccess(proc *procInfo, path string, mode AccessMode) error {
 			cur = filepath.Join(cur, c)
 		}
 
-		fi, err := os.Stat(cur)
+		symlink, isDir, err := isSymlink(cur)
 		if err != nil {
 			return syscall.ENOENT
 		}
 
-		symlink, err := isSymlink(cur)
-		if err != nil {
-			return syscall.ENOENT
-		}
-
-		if !final && !symlink && !fi.IsDir() {
+		if !final && !symlink && !isDir {
 			return syscall.ENOTDIR
 		}
 
@@ -216,25 +215,30 @@ func procPathAccess(proc *procInfo, path string, mode AccessMode) error {
 				if linkCnt >= symlinkMax {
 					return syscall.ELOOP
 				}
-				cur, err = os.Readlink(cur)
+
+				link, err := os.Readlink(cur)
 				if err != nil {
 					return syscall.ENOENT
 				}
-				isLink, err := isSymlink(cur)
+
+				if filepath.IsAbs(link) {
+					cur = filepath.Join(proc.root, link)
+				} else {
+					cur = filepath.Join(filepath.Dir(cur), link)
+				}
+
+				symlink, isDir, err = isSymlink(cur)
 				if err != nil {
 					return syscall.ENOENT
 				}
-				if !isLink {
+
+				if !symlink {
 					break
 				}
 				linkCnt += 1
 			}
-			fi, err := os.Stat(cur)
-			if err != nil {
-				return syscall.ENOENT
-			}
 
-			if !final && !fi.IsDir() {
+			if !final && !isDir {
 				return syscall.ENOTDIR
 			}
 		}
