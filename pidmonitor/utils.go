@@ -25,7 +25,7 @@ func eventIsSet(evect int, etype int) bool {
 	return evect&etype == etype
 }
 
-func eventTableAdd(t map[int]int, e PidEvent) {
+func eventTableAdd(t map[uint32]int, e PidEvent) {
 	pid := e.Pid
 	pidEvent := e.Event
 
@@ -37,7 +37,7 @@ func eventTableAdd(t map[int]int, e PidEvent) {
 	}
 }
 
-func eventTableRm(t map[int]int, e PidEvent) {
+func eventTableRm(t map[uint32]int, e PidEvent) {
 	pid := e.Pid
 	pidEvent := e.Event
 

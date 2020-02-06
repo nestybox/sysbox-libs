@@ -27,7 +27,7 @@ const (
 
 // Represents an event on the given process
 type PidEvent struct {
-	Pid   int
+	Pid   uint32
 	Event int   // bit vector of events
 	Err   error // set by WaitEvent() when an error is detected
 }
@@ -36,9 +36,9 @@ type PidEvent struct {
 type PidMon struct {
 	mu         sync.Mutex
 	cfg        *Cfg
-	eventTable map[int]int     // maps each pid to it's event vector
+	eventTable map[uint32]int  // maps each pid to it's event vector
 	cmdCh      chan cmd        // sends commands to monitor thread
-	eventCh    chan []PidEvent // receives events from monitor thread
+	EventCh    chan []PidEvent // receives events from monitor thread
 }
 
 // Creates a instance of the pid monitor; returns a the pidMon ID.
@@ -50,9 +50,9 @@ func New(cfg *Cfg) (*PidMon, error) {
 
 	pm := &PidMon{
 		cfg:        cfg,
-		eventTable: make(map[int]int),
+		eventTable: make(map[uint32]int),
 		cmdCh:      make(chan cmd),
-		eventCh:    make(chan []PidEvent, 10), // buffered to prevent monitor thread from blocking when pushing events
+		EventCh:    make(chan []PidEvent, 10), // buffered to prevent monitor thread from blocking when pushing events
 	}
 
 	go pidMonitor(pm)
@@ -93,7 +93,7 @@ func (pm *PidMon) RemoveEvent(events []PidEvent) error {
 // Blocks the calling process until the given pidMon detects an event in one or more of
 // the processes it's monitoring. Returns the list of events.
 func (pm *PidMon) WaitEvent() []PidEvent {
-	eventList := <-pm.eventCh
+	eventList := <-pm.EventCh
 	return eventList
 }
 

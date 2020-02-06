@@ -23,7 +23,7 @@ func pidMonitor(pm *PidMon) {
 		select {
 		case cmd := <-pm.cmdCh:
 			if cmd == stop {
-				pm.eventCh <- eventList
+				pm.EventCh <- eventList
 				return
 			}
 		default:
@@ -50,7 +50,7 @@ func pidMonitor(pm *PidMon) {
 
 		// send event list
 		if len(eventList) > 0 {
-			pm.eventCh <- eventList
+			pm.EventCh <- eventList
 		}
 
 		// remove events that won't hit any more
@@ -66,7 +66,7 @@ func pidMonitor(pm *PidMon) {
 }
 
 // Checks if a process with the given pid exists.
-func pidExists(pid int) (bool, error) {
+func pidExists(pid uint32) (bool, error) {
 
 	// Our current checking mechanism is very simple but not the best; in the future, we
 	// should consider replacing it with the newly added pidfd_* syscalls in Linux.
