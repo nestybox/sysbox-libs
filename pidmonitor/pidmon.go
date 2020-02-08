@@ -41,7 +41,7 @@ type PidMon struct {
 	EventCh    chan []PidEvent // receives events from monitor thread
 }
 
-// Creates a instance of the pid monitor; returns a the pidMon ID.
+// Creates a instance of the pid monitor; returns the pidMon ID.
 func New(cfg *Cfg) (*PidMon, error) {
 
 	if err := validateCfg(cfg); err != nil {
