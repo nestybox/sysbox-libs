@@ -179,7 +179,7 @@ func TestEventExit(t *testing.T) {
 	// create the event monitor list
 	eventList := []PidEvent{}
 	for _, pid := range pidList {
-		eventList = append(eventList, PidEvent{pid, Exit, nil})
+		eventList = append(eventList, PidEvent{uint32(pid), Exit, nil})
 	}
 
 	resultCh := make(chan error)
@@ -248,7 +248,7 @@ func killer(t *testing.T, numProc int, pidMon *PidMon, spawnedCh, killedCh chan 
 		// Tell pidMon to watch for exit event on the spawned processes
 		eventList := []PidEvent{}
 		for _, pid := range spawnedList {
-			eventList = append(eventList, PidEvent{pid, Exit, nil})
+			eventList = append(eventList, PidEvent{uint32(pid), Exit, nil})
 		}
 		if err := pidMon.AddEvent(eventList); err != nil {
 			t.Fatalf("AddEvent() failed: %s\n", err)
@@ -291,7 +291,7 @@ func waiter(t *testing.T, numProc int, pidMon *PidMon, eventCh chan []int) {
 			if e.Event != Exit {
 				t.Fatalf("pidMon reported non-exit event: pid = %d, event = %x\n", e.Pid, e.Event)
 			}
-			eventList = append(eventList, e.Pid)
+			eventList = append(eventList, int(e.Pid))
 		}
 
 		if len(eventList) >= numProc {
