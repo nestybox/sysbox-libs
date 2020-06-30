@@ -13,8 +13,8 @@ import (
 	"github.com/docker/docker/client"
 )
 
-type DockerContainer struct {
-	ImageID string
+type ContainerInfo struct {
+	AutoRemove bool
 }
 
 type Docker struct {
@@ -22,6 +22,7 @@ type Docker struct {
 	dataRoot string
 }
 
+// DockerConnect establishes a session with the Docker daemon.
 func DockerConnect() (*Docker, error) {
 
 	cli, err := client.NewEnvClient()
@@ -40,12 +41,14 @@ func DockerConnect() (*Docker, error) {
 	}, nil
 }
 
+// GetDataRoot returns the Docker daemon's data-root dir (usually "/var/lib/docker/").
 func (d *Docker) GetDataRoot() string {
 	return d.dataRoot
 }
 
-func (d *Docker) GetContainer(containerID string) (DockerContainer, error) {
-	var dc DockerContainer
+// ContainerGetImageID returns the image ID of the given container; may be
+// called during container creation.
+func (d *Docker) ContainerGetImageID(containerID string) (string, error) {
 
 	filter := filters.NewArgs()
 	filter.Add("id", containerID)
@@ -56,22 +59,37 @@ func (d *Docker) GetContainer(containerID string) (DockerContainer, error) {
 		All:     true, // required since container may not yet be running
 		Filters: filter,
 	})
+
 	if err != nil {
-		return dc, err
+		return "", err
 	}
 
 	if len(containers) == 0 {
-		return dc, fmt.Errorf("not found")
+		return "", fmt.Errorf("not found")
 	} else if len(containers) > 1 {
-		return dc, fmt.Errorf("more than one container matches ID %s: %v", containerID, containers)
+		return "", fmt.Errorf("more than one container matches ID %s: %v", containerID, containers)
 	}
 
-	dc.ImageID = containers[0].ImageID
-
-	return dc, nil
+	return containers[0].ImageID, nil
 }
 
-func (d *Docker) IsDockerContainer(id string) bool {
-	_, err := d.GetContainer(id)
+// ContainerIsDocker returns true if the given container ID corresponds to a
+// Docker container.
+func (d *Docker) ContainerIsDocker(id string) bool {
+	_, err := d.ContainerGetImageID(id)
 	return err == nil
+}
+
+// ContainerGetInfo returns info for the given container. Must be called
+// after the container is created.
+func (d *Docker) ContainerGetInfo(containerID string) (*ContainerInfo, error) {
+
+	info, err := d.cli.ContainerInspect(context.Background(), containerID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ContainerInfo{
+		AutoRemove: info.HostConfig.AutoRemove,
+	}, nil
 }

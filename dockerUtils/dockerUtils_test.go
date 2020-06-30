@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-func TestDockerUtils(t *testing.T) {
+func TestGetContainer(t *testing.T) {
 	docker, err := DockerConnect()
 	if err != nil {
 		t.Fatalf("DockerConnect() failed: %v", err)
@@ -23,29 +23,63 @@ func TestDockerUtils(t *testing.T) {
 		t.Errorf("docker.GetDataRoot(): want /var/lib/docker; got %s", dataRoot)
 	}
 
-	id, err := testStartContainer()
+	id, err := testStartContainer(false)
 	if err != nil {
 		t.Fatalf("Failed to start test container: %v", err)
 	}
 
-	if !docker.IsDockerContainer(id) {
-		t.Errorf("IsDockerContainer(%s) failed", id)
+	ci, err := docker.ContainerGetInfo(id)
+	if err != nil {
+		t.Errorf("ContainerGetInfo(%s) failed: %v", id, err)
 	}
 
-	if _, err := docker.GetContainer(id); err != nil {
-		t.Errorf("GetContainer(%s) failed: %v", id, err)
+	if ci.AutoRemove != false {
+		t.Errorf("Container autoRemove mismatch: want false, got true")
 	}
 
-	if err := testStopContainer(id); err != nil {
+	if !docker.ContainerIsDocker(id) {
+		t.Errorf("ContainerIsDocker(%s) failed", id)
+	}
+
+	if err := testStopContainer(id, true); err != nil {
 		t.Errorf("Failed to stop test container: %v", err)
 	}
 }
 
-func testStartContainer() (string, error) {
+func TestGetContainerAutoRemove(t *testing.T) {
+	docker, err := DockerConnect()
+	if err != nil {
+		t.Fatalf("DockerConnect() failed: %v", err)
+	}
+
+	id, err := testStartContainer(true)
+	if err != nil {
+		t.Fatalf("Failed to start test container: %v", err)
+	}
+
+	ci, err := docker.ContainerGetInfo(id)
+	if err != nil {
+		t.Errorf("ContainerGetInfo(%s) failed: %v", id, err)
+	}
+
+	if ci.AutoRemove != true {
+		t.Errorf("Container autoRemove mismatch: want true, got false")
+	}
+
+	if err := testStopContainer(id, false); err != nil {
+		t.Errorf("Failed to stop test container: %v", err)
+	}
+}
+
+func testStartContainer(autoRemove bool) (string, error) {
 	var cmd *exec.Cmd
 	var stdout, stderr bytes.Buffer
 
-	cmd = exec.Command("docker", "run", "-d", "alpine", "tail", "-f", "/dev/null")
+	if autoRemove {
+		cmd = exec.Command("docker", "run", "-d", "--rm", "alpine", "tail", "-f", "/dev/null")
+	} else {
+		cmd = exec.Command("docker", "run", "-d", "alpine", "tail", "-f", "/dev/null")
+	}
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
@@ -58,11 +92,16 @@ func testStartContainer() (string, error) {
 	return id, nil
 }
 
-func testStopContainer(id string) error {
+func testStopContainer(id string, remove bool) error {
 	var cmd *exec.Cmd
 	var stdout, stderr bytes.Buffer
 
-	cmd = exec.Command("docker", "stop", "-t0", id)
+	if remove {
+		cmd = exec.Command("docker", "rm", "-f", id)
+	} else {
+		cmd = exec.Command("docker", "stop", "-t0", id)
+	}
+
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
