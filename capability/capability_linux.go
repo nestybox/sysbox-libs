@@ -131,11 +131,6 @@ func newPid(pid int) (c Capabilities, err error) {
 	}
 
 	switch capVers {
-	case linuxCapVer1:
-		p := new(capsV1)
-		p.hdr.version = capVers
-		p.hdr.pid = int32(pid)
-		c = p
 	case linuxCapVer2, linuxCapVer3:
 		p := new(capsV3)
 		p.hdr.version = capVers
@@ -146,119 +141,6 @@ func newPid(pid int) (c Capabilities, err error) {
 		return
 	}
 	return
-}
-
-type capsV1 struct {
-	hdr  capHeader
-	data capData
-}
-
-func (c *capsV1) Get(which CapType, what Cap) bool {
-	if what > 32 {
-		return false
-	}
-
-	switch which {
-	case EFFECTIVE:
-		return (1<<uint(what))&c.data.effective != 0
-	case PERMITTED:
-		return (1<<uint(what))&c.data.permitted != 0
-	case INHERITABLE:
-		return (1<<uint(what))&c.data.inheritable != 0
-	}
-
-	return false
-}
-
-func (c *capsV1) getData(which CapType) (ret uint32) {
-	switch which {
-	case EFFECTIVE:
-		ret = c.data.effective
-	case PERMITTED:
-		ret = c.data.permitted
-	case INHERITABLE:
-		ret = c.data.inheritable
-	}
-	return
-}
-
-func (c *capsV1) Empty(which CapType) bool {
-	return c.getData(which) == 0
-}
-
-func (c *capsV1) Full(which CapType) bool {
-	return (c.getData(which) & 0x7fffffff) == 0x7fffffff
-}
-
-func (c *capsV1) Set(which CapType, caps ...Cap) {
-	for _, what := range caps {
-		if what > 32 {
-			continue
-		}
-
-		if which&EFFECTIVE != 0 {
-			c.data.effective |= 1 << uint(what)
-		}
-		if which&PERMITTED != 0 {
-			c.data.permitted |= 1 << uint(what)
-		}
-		if which&INHERITABLE != 0 {
-			c.data.inheritable |= 1 << uint(what)
-		}
-	}
-}
-
-func (c *capsV1) Unset(which CapType, caps ...Cap) {
-	for _, what := range caps {
-		if what > 32 {
-			continue
-		}
-
-		if which&EFFECTIVE != 0 {
-			c.data.effective &= ^(1 << uint(what))
-		}
-		if which&PERMITTED != 0 {
-			c.data.permitted &= ^(1 << uint(what))
-		}
-		if which&INHERITABLE != 0 {
-			c.data.inheritable &= ^(1 << uint(what))
-		}
-	}
-}
-
-func (c *capsV1) Fill(kind CapType) {
-	if kind&CAPS == CAPS {
-		c.data.effective = 0x7fffffff
-		c.data.permitted = 0x7fffffff
-		c.data.inheritable = 0
-	}
-}
-
-func (c *capsV1) Clear(kind CapType) {
-	if kind&CAPS == CAPS {
-		c.data.effective = 0
-		c.data.permitted = 0
-		c.data.inheritable = 0
-	}
-}
-
-func (c *capsV1) StringCap(which CapType) (ret string) {
-	return mkStringCap(c, which)
-}
-
-func (c *capsV1) String() (ret string) {
-	return mkString(c, BOUNDING)
-}
-
-func (c *capsV1) Load() (err error) {
-	return capget(&c.hdr, &c.data)
-}
-
-func (c *capsV1) Apply(kind CapType) error {
-	if kind&CAPS == CAPS {
-		return capset(&c.hdr, &c.data)
-	}
-	return nil
 }
 
 type capsV3 struct {
@@ -309,6 +191,26 @@ func (c *capsV3) getData(which CapType, dest []uint32) {
 		dest[0] = c.ambient[0]
 		dest[1] = c.ambient[1]
 	}
+}
+
+// Sysbox's method addition.
+func (c *capsV3) GetEffCaps() [2]uint32 {
+
+	var data [2]uint32
+	c.getData(EFFECTIVE, data[:])
+
+	return data
+}
+
+// Sysbox's method addition.
+func (c *capsV3) SetEffCaps(caps [2]uint32) {
+
+	if len(caps) != 2 {
+		return
+	}
+
+	c.data[0].effective = caps[0]
+	c.data[1].effective = caps[1]
 }
 
 func (c *capsV3) Empty(which CapType) bool {
@@ -418,7 +320,7 @@ func (c *capsV3) ClearOriginal(kind CapType) {
 	}
 }
 
-// Sysbox-fs implementation of the original Clear() method (see above). In this
+// Sysbox implementation of the original Clear() method (see above). In this
 // implementation we are handling every CAPS category separately to allow any
 // capability-type (kind) to be individually updated.
 func (c *capsV3) Clear(kind CapType) {
@@ -494,7 +396,7 @@ func (c *capsV3) LoadOriginal() (err error) {
 	return
 }
 
-// Sysbox-fs implementation of the original Load() method (see above). For
+// Sysbox implementation of the original Load() method (see above). For
 // efficiency purposes, in this case we are not parsing 'status' file to
 // extract 'ambient' and 'bonding' capabilities.
 func (c *capsV3) Load() (err error) {
@@ -600,6 +502,26 @@ func (c *capsFile) getData(which CapType, dest []uint32) {
 		dest[0] = c.data.data[0].inheritable
 		dest[1] = c.data.data[1].inheritable
 	}
+}
+
+// Sysbox's method addition.
+func (c *capsFile) GetEffCaps() [2]uint32 {
+
+	var data [2]uint32
+	c.getData(EFFECTIVE, data[:])
+
+	return data
+}
+
+// Sysbox's method addition.
+func (c *capsFile) SetEffCaps(caps [2]uint32) {
+
+	if len(caps) != 2 {
+		return
+	}
+
+	c.data.effective[0] = caps[0]
+	c.data.effective[1] = caps[1]
 }
 
 func (c *capsFile) Empty(which CapType) bool {

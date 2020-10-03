@@ -443,6 +443,12 @@ type Capabilities interface {
 	// Apply apply the capabilities settings, so all changes will take
 	// effect.
 	Apply(kind CapType) error
+
+	// Collect effective capabilities.
+	GetEffCaps() [2]uint32
+
+	// Set effective capabilities.
+	SetEffCaps(caps [2]uint32)
 }
 
 // NewPid initializes a new Capabilities object for given pid when
