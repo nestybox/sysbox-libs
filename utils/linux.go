@@ -40,6 +40,61 @@ func GetDistro() (string, error) {
 	return distro, nil
 }
 
+// Parse os-release lines looking for 'ID' field. Originally borrowed from
+// acobaugh/osrelease lib and adjusted to extract only the os-release "ID"
+// field.
+func parseLineDistroId(line string) string {
+
+	// Skip empty lines.
+	if len(line) == 0 {
+		return ""
+	}
+
+	// Skip comments.
+	if line[0] == '#' {
+		return ""
+	}
+
+	// Try to split string at the first '='.
+	splitString := strings.SplitN(line, "=", 2)
+	if len(splitString) != 2 {
+		return ""
+	}
+
+	// Trim white space from key. Return here if we are not dealing
+	// with an "ID" field.
+	key := splitString[0]
+	key = strings.Trim(key, " ")
+	if key != "ID" {
+		return ""
+	}
+
+	// Trim white space from value.
+	value := splitString[1]
+	value = strings.Trim(value, " ")
+
+	// Handle double quotes.
+	if strings.ContainsAny(value, `"`) {
+		first := string(value[0:1])
+		last := string(value[len(value)-1:])
+
+		if first == last && strings.ContainsAny(first, `"'`) {
+			value = strings.TrimPrefix(value, `'`)
+			value = strings.TrimPrefix(value, `"`)
+			value = strings.TrimSuffix(value, `'`)
+			value = strings.TrimSuffix(value, `"`)
+		}
+	}
+
+	// Expand anything else that could be escaped.
+	value = strings.Replace(value, `\"`, `"`, -1)
+	value = strings.Replace(value, `\$`, `$`, -1)
+	value = strings.Replace(value, `\\`, `\`, -1)
+	value = strings.Replace(value, "\\`", "`", -1)
+
+	return value
+}
+
 // Obtain system's linux distribution in the passed rootfs.
 func GetDistroPath(rootfs string) (string, error) {
 
@@ -65,13 +120,9 @@ func GetDistroPath(rootfs string) (string, error) {
 
 		// Iterate through os-release lines looking for 'ID' content.
 		for _, line := range lines {
-			elems := strings.Split(string(line), "=")
-			if len(elems) == 1 {
-				continue
-			}
-
-			if elems[0] == "ID" {
-				return elems[1], nil
+			distro := parseLineDistroId(line)
+			if distro != "" {
+				return distro, nil
 			}
 		}
 	}
