@@ -41,6 +41,14 @@ func DockerConnect() (*Docker, error) {
 	}, nil
 }
 
+func (d *Docker) Disconnect() error {
+	err := d.cli.Close()
+	if err != nil {
+		return fmt.Errorf("Failed to disconnect from Docker API: %v", err)
+	}
+	return nil
+}
+
 // GetDataRoot returns the Docker daemon's data-root dir (usually "/var/lib/docker/").
 func (d *Docker) GetDataRoot() string {
 	return d.dataRoot
