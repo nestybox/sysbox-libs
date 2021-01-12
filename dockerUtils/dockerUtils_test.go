@@ -10,10 +10,16 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGetContainer(t *testing.T) {
-	docker, err := DockerConnect()
+
+	testMode = true
+
+	timeout := time.Duration(3 * time.Second)
+
+	docker, err := DockerConnect(timeout)
 	if err != nil {
 		t.Fatalf("DockerConnect() failed: %v", err)
 	}
@@ -37,8 +43,20 @@ func TestGetContainer(t *testing.T) {
 		t.Errorf("Container autoRemove mismatch: want false, got true")
 	}
 
-	if !docker.ContainerIsDocker(id) {
-		t.Errorf("ContainerIsDocker(%s) failed", id)
+	isDocker, err := ContainerIsDocker(id, ci.Rootfs)
+	if err != nil {
+		t.Errorf("ContainerIsDocker(%s, %s) failed: %v", id, ci.Rootfs, err)
+	}
+	if !isDocker {
+		t.Errorf("ContainerIsDocker(%s, %s) returned false; expecting true", id, ci.Rootfs)
+	}
+
+	isDockerRootfs, err := isDockerRootfs(ci.Rootfs)
+	if err != nil {
+		t.Errorf("isDockerRootfs(%s) failed: %v", ci.Rootfs, err)
+	}
+	if !isDockerRootfs {
+		t.Errorf("isDockerRootfs(%s) returned false; expecting true", ci.Rootfs)
 	}
 
 	if err := testStopContainer(id, true); err != nil {
@@ -47,7 +65,12 @@ func TestGetContainer(t *testing.T) {
 }
 
 func TestGetContainerAutoRemove(t *testing.T) {
-	docker, err := DockerConnect()
+
+	testMode = true
+
+	timeout := time.Duration(3 * time.Second)
+
+	docker, err := DockerConnect(timeout)
 	if err != nil {
 		t.Fatalf("DockerConnect() failed: %v", err)
 	}
