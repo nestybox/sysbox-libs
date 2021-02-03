@@ -23,6 +23,7 @@ func TestGetContainer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DockerConnect() failed: %v", err)
 	}
+	defer docker.Disconnect()
 
 	dataRoot := docker.GetDataRoot()
 	if dataRoot != "/var/lib/docker" {
