@@ -35,7 +35,7 @@ type Docker struct {
 // DockerConnect establishes a session with the Docker daemon.
 func DockerConnect(timeout time.Duration) (*Docker, error) {
 
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithTimeout(timeout))
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithTimeout(timeout), client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("Failed to connect to Docker API: %v", err)
 	}
