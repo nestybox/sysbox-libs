@@ -64,16 +64,21 @@ func pidMonitor(pm *PidMon) {
 			}
 		}
 
+		// release the lock so that we don't hold it while sending the event list
+		// (in case the event channel is blocked); this way new events can
+		// continue to be added.
+		pm.mu.Unlock()
+
 		// send event list
 		if len(eventList) > 0 {
 			pm.EventCh <- eventList
 		}
 
 		// remove events that won't hit any more
+		pm.mu.Lock()
 		for _, e := range rmList {
 			eventTableRm(pm.eventTable, e)
 		}
-
 		pm.mu.Unlock()
 
 		// wait for the poll period

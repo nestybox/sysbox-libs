@@ -68,7 +68,7 @@ func New(cfg *Cfg) (*PidMon, error) {
 		cfg:        cfg,
 		eventTable: make(map[uint32]int),
 		cmdCh:      make(chan cmd),
-		EventCh:    make(chan []PidEvent, 10), // buffered to prevent monitor thread from blocking when pushing events
+		EventCh:    make(chan []PidEvent, 100), // buffered to prevent monitor thread from blocking when pushing events
 	}
 
 	go pidMonitor(pm)
