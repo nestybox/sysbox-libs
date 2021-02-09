@@ -38,7 +38,7 @@ func DockerConnect(timeout time.Duration) (*Docker, error) {
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
 		client.WithTimeout(timeout),
-		client.WithAPIVersionNegotiation()
+		client.WithAPIVersionNegotiation(),
 	)
 
 	if err != nil {
