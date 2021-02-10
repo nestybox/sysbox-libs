@@ -42,12 +42,16 @@ func DockerConnect(timeout time.Duration) (*Docker, error) {
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("Failed to connect to Docker API: %v", err)
+		return nil, fmt.Errorf("failed to connect to Docker API: %v", err)
 	}
 
 	info, err := cli.Info(context.Background())
 	if err != nil {
-		return nil, fmt.Errorf("Failed to retrieve Docker info: %v", err)
+		err2 := cli.Close()
+		if err2 != nil {
+			return nil, fmt.Errorf("failed to retrieve Dockerinfo (%v) and disconnect from Docker API (%v)", err, err2)
+		}
+		return nil, fmt.Errorf("failed to retrieve Docker info: %v", err)
 	}
 
 	return &Docker{
@@ -59,7 +63,7 @@ func DockerConnect(timeout time.Duration) (*Docker, error) {
 func (d *Docker) Disconnect() error {
 	err := d.cli.Close()
 	if err != nil {
-		return fmt.Errorf("Failed to disconnect from Docker API: %v", err)
+		return fmt.Errorf("failed to disconnect from Docker API: %v", err)
 	}
 	return nil
 }
