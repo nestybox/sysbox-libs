@@ -156,6 +156,8 @@ func GetLinuxHeaderPath(distro string) (string, error) {
 
 	if distro == "redhat" || distro == "centos" || distro == "fedora" {
 		path = filepath.Join("/usr/src/kernels", kernelRel)
+	} else if distro == "arch" {
+		path = filepath.Join("/lib/modules", kernelRel, "build")
 	} else {
 		// All other distros appear to be following the "/usr/src/linux-headers-rel"
 		// naming convention.
