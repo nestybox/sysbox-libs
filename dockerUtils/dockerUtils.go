@@ -22,6 +22,32 @@ import (
 // Set to true during testing only
 var testMode = false
 
+type ErrCode int
+
+const (
+	DockerConnErr ErrCode = iota
+	DockerDiscErr
+	DockerInfoErr
+	DockerContInfoErr
+	DockerOtherErr
+)
+
+type DockerErr struct {
+	Code ErrCode
+	msg string
+}
+
+func newDockerErr(code ErrCode, msg string) *DockerErr {
+	return &DockerErr{
+		Code: code,
+		msg: msg,
+	}
+}
+
+func (e *DockerErr) Error() string {
+	return e.msg
+}
+
 type ContainerInfo struct {
 	Rootfs     string
 	AutoRemove bool
@@ -42,16 +68,16 @@ func DockerConnect(timeout time.Duration) (*Docker, error) {
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to Docker API: %v", err)
+		return nil, newDockerErr(DockerConnErr, fmt.Sprintf("failed to connect to Docker API: %v", err))
 	}
 
 	info, err := cli.Info(context.Background())
 	if err != nil {
 		err2 := cli.Close()
 		if err2 != nil {
-			return nil, fmt.Errorf("failed to retrieve Dockerinfo (%v) and disconnect from Docker API (%v)", err, err2)
+			return nil, newDockerErr(DockerInfoErr, fmt.Sprintf("failed to retrieve Docker info (%v) and disconnect from Docker API (%v)", err, err2))
 		}
-		return nil, fmt.Errorf("failed to retrieve Docker info: %v", err)
+		return nil, newDockerErr(DockerInfoErr, fmt.Sprintf("failed to retrieve Docker info", err))
 	}
 
 	return &Docker{
@@ -63,7 +89,7 @@ func DockerConnect(timeout time.Duration) (*Docker, error) {
 func (d *Docker) Disconnect() error {
 	err := d.cli.Close()
 	if err != nil {
-		return fmt.Errorf("failed to disconnect from Docker API: %v", err)
+		return newDockerErr(DockerDiscErr, fmt.Sprintf("failed to disconnect from Docker API: %v", err))
 	}
 	return nil
 }
@@ -80,21 +106,19 @@ func (d *Docker) ContainerGetImageID(containerID string) (string, error) {
 	filter := filters.NewArgs()
 	filter.Add("id", containerID)
 
-	cli := d.cli
-
-	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{
+	containers, err := d.cli.ContainerList(context.Background(), types.ContainerListOptions{
 		All:     true, // required since container may not yet be running
 		Filters: filter,
 	})
 
 	if err != nil {
-		return "", err
+		return "", newDockerErr(DockerContInfoErr, err.Error())
 	}
 
 	if len(containers) == 0 {
-		return "", fmt.Errorf("not found")
+		return "", newDockerErr(DockerContInfoErr, fmt.Sprintf("container %s found", containerID))
 	} else if len(containers) > 1 {
-		return "", fmt.Errorf("more than one container matches ID %s: %v", containerID, containers)
+		return "", newDockerErr(DockerContInfoErr, fmt.Sprintf("more than one container matches ID %s: %v", containerID, containers))
 	}
 
 	return containers[0].ImageID, nil
@@ -170,12 +194,12 @@ func isDockerRootfs(rootfs string) (bool, error) {
 
 		dir, err := os.Open(path)
 		if err != nil {
-			return false, fmt.Errorf("failed to open %s: %s\n", path, err)
+			return false, newDockerErr(DockerOtherErr, fmt.Sprintf("failed to open %s: %s\n", path, err))
 		}
 
 		filenames, err := dir.Readdirnames(maxFilesPerDir)
 		if err != nil {
-			return false, fmt.Errorf("failed to read directories under %s: %s\n", path, err)
+			return false, newDockerErr(DockerOtherErr, fmt.Sprintf("failed to read directories under %s: %s\n", path, err))
 		}
 
 		isDocker := true
