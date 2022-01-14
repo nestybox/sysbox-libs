@@ -17,8 +17,11 @@
 package utils
 
 import (
+	"bufio"
 	"bytes"
 	"fmt"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -180,6 +183,32 @@ func KernelCurrentVersionCmp(k1Major, k1Minor int) (int, error) {
 	return -1, nil
 }
 
+// Parses the kernel release string (obtained from GetKernelRelease()) and returns
+// the major and minor numbers.
+func ParseKernelRelease(rel string) (int, int, error) {
+	var (
+		major, minor int
+		err          error
+	)
+
+	splits := strings.SplitN(rel, ".", -1)
+	if len(splits) < 2 {
+		return -1, -1, fmt.Errorf("failed to parse kernel release %v", rel)
+	}
+
+	major, err = strconv.Atoi(splits[0])
+	if err != nil {
+		return -1, -1, fmt.Errorf("failed to parse kernel release %v", rel)
+	}
+
+	minor, err = strconv.Atoi(splits[1])
+	if err != nil {
+		return -1, -1, fmt.Errorf("failed to parse kernel release %v", rel)
+	}
+
+	return major, minor, nil
+}
+
 // Obtain location of kernel-headers for a given linux distro.
 func GetLinuxHeaderPath(distro string) (string, error) {
 
@@ -202,4 +231,51 @@ func GetLinuxHeaderPath(distro string) (string, error) {
 	}
 
 	return path, nil
+}
+
+func KernelSupportsIDMappedMounts() (bool, error) {
+	var major, minor int
+
+	rel, err := GetKernelRelease()
+	if err != nil {
+		return false, err
+	}
+
+	major, minor, err = ParseKernelRelease(rel)
+	if err != nil {
+		return false, err
+	}
+
+	// ID-Mapped mounts requires Linux kernel >= 5.12
+
+	if major < 5 {
+		return false, nil
+	} else if major == 5 && minor < 12 {
+		return false, nil
+	} else {
+		return true, nil
+	}
+}
+
+// KernelModSupported returns nil if the given module is loaded in the kernel.
+func KernelModSupported(mod string) (bool, error) {
+
+	// Load the module
+	exec.Command("modprobe", mod).Run()
+
+	// Check if the module is in the kernel
+	f, err := os.Open("/proc/modules")
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+
+	s := bufio.NewScanner(f)
+	for s.Scan() {
+		if strings.Contains(s.Text(), mod) {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
