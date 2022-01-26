@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/afero"
@@ -142,6 +143,41 @@ func GetKernelRelease() (string, error) {
 	n := bytes.IndexByte(utsname.Release[:], 0)
 
 	return string(utsname.Release[:n]), nil
+}
+
+func KernelCurrentVersionCmp(k1Major, k1Minor int) (int, error) {
+
+	rel, err := GetKernelRelease()
+	if err != nil {
+		return 0, err
+	}
+
+	splits := strings.SplitN(rel, ".", -1)
+	if len(splits) < 2 {
+		return 0, fmt.Errorf("failed to parse kernel release %v", rel)
+	}
+
+	k2Major, err := strconv.Atoi(splits[0])
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse kernel release %v", rel)
+	}
+
+	k2Minor, err := strconv.Atoi(splits[1])
+	if err != nil {
+		return 0, fmt.Errorf("failed to parse kernel release %v", rel)
+	}
+
+	if k2Major > k1Major {
+		return 1, nil
+	} else if k2Major == k1Major {
+		if k2Minor > k1Minor {
+			return 1, nil
+		} else if k2Minor == k1Minor {
+			return 0, nil
+		}
+	}
+
+	return -1, nil
 }
 
 // Obtain location of kernel-headers for a given linux distro.
