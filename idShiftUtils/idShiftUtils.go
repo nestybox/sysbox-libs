@@ -102,9 +102,6 @@ func shiftAclType(aclT aclType, path string, uidOffset, gidOffset int32) error {
 
 	// Write back the modified ACL
 	if aclShifted {
-
-		logrus.Debugf("shifting ACLs for %s", path)
-
 		if aclT == aclTypeDefault {
 			err = acl.SetDefault(path, newACL)
 		} else {
@@ -113,8 +110,6 @@ func shiftAclType(aclT aclType, path string, uidOffset, gidOffset int32) error {
 		if err != nil {
 			return fmt.Errorf("failed to set ACL %v for %s: %s", newACL, path, err)
 		}
-
-		logrus.Debugf("ACL shift for %s done", path)
 	}
 
 	return nil
@@ -177,8 +172,6 @@ func ShiftIdsWithChown(baseDir string, uidOffset, gidOffset int32) error {
 
 			targetUid := int32(st.Uid) + uidOffset
 			targetGid := int32(st.Gid) + gidOffset
-
-			logrus.Debugf("chown %s from %d:%d to %d:%d", path, st.Uid, st.Gid, targetUid, targetGid)
 
 			err = unix.Lchown(path, int(targetUid), int(targetGid))
 			if err != nil {
