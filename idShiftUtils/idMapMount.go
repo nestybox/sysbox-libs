@@ -14,6 +14,8 @@
 // limitations under the License.
 //
 
+// +build linux,idmapped_mnt,cgo
+
 package idShiftUtils
 
 // #define _GNU_SOURCE
