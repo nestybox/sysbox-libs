@@ -148,6 +148,9 @@ func GetKernelRelease() (string, error) {
 	return string(utsname.Release[:n]), nil
 }
 
+// Compares the given kernel version versus the current kernel version. Returns
+// 0 if versions are equal, 1 if the current kernel has higher version than the
+// given one, -1 otherwise.
 func KernelCurrentVersionCmp(k1Major, k1Minor int) (int, error) {
 
 	rel, err := GetKernelRelease()
