@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+//go:build linux && idmapped_mnt && cgo
 // +build linux,idmapped_mnt,cgo
 
 package idShiftUtils
@@ -30,14 +31,6 @@ package idShiftUtils
 // #include <string.h>
 // #include <sys/syscall.h>
 // #include <unistd.h>
-//
-// static inline int
-// mount_setattr(int dirfd, const char *pathname, unsigned int flags,
-//               struct mount_attr *attr, size_t size)
-// {
-//     return syscall(SYS_mount_setattr, dirfd, pathname, flags,
-//                    attr, size);
-// }
 //
 // static inline int
 // open_tree(int dirfd, const char *filename, unsigned int flags)
@@ -61,6 +54,17 @@ import (
 
 	"golang.org/x/sys/unix"
 )
+
+// The following are filesystems and host directories where we never ID-map
+// mount as it causes functional problems (i.e., the kernel does not yet support
+// ID-mapped mounts over them).
+
+var idMapMountFsBlackList = []int64{
+	unix.OVERLAYFS_SUPER_MAGIC,
+	unix.TMPFS_MAGIC,
+}
+
+var idMapMountDevBlackList = []string{"/dev/null"}
 
 // Opens a mount tree (wrapper for open_tree() syscall).
 func openTree(dirFd int, path string, flags uint) (int, error) {
@@ -136,4 +140,27 @@ func IDMapMount(usernsPath, mountPath string) error {
 
 	unix.Close(fdTree)
 	return nil
+}
+
+func IDMapMountSupportedOnPath(path string) (bool, error) {
+	var fs unix.Statfs_t
+
+	for _, m := range idMapMountDevBlackList {
+		if path == m {
+			return false, nil
+		}
+	}
+
+	err := unix.Statfs(path, &fs)
+	if err != nil {
+		return false, err
+	}
+
+	for _, name := range idMapMountFsBlackList {
+		if fs.Type == name {
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
