@@ -14,6 +14,7 @@
 // limitations under the License.
 //
 
+//go:build !linux || !idmapped_mnt || !cgo
 // +build !linux !idmapped_mnt !cgo
 
 package idShiftUtils
@@ -22,4 +23,8 @@ import "fmt"
 
 func IDMapMount(usernsPath, mountPath string) error {
 	return fmt.Errorf("idmapped mount unsupported in this Sysbox build.")
+}
+
+func IDMapMountSupportedOnPath(path string) (bool, error) {
+	return false, nil
 }
