@@ -62,6 +62,7 @@ import (
 var idMapMountFsBlackList = []int64{
 	unix.OVERLAYFS_SUPER_MAGIC,
 	unix.TMPFS_MAGIC,
+	unix.BTRFS_SUPER_MAGIC,
 }
 
 var idMapMountDevBlackList = []string{"/dev/null"}
