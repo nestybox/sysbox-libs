@@ -50,6 +50,7 @@ import "C"
 import (
 	"fmt"
 	"os"
+	"strings"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -105,6 +106,14 @@ func IDMapMount(usernsPath, mountPath string) error {
 		return fmt.Errorf("Failed to open %s: %s", usernsPath, err)
 	}
 	defer usernsFd.Close()
+
+	// If mountPath is procfd based, read the magic link
+	if strings.HasPrefix(mountPath, "/proc/self/fd/") {
+		mountPath, err = os.Readlink(mountPath)
+		if err != nil {
+			return fmt.Errorf("Failed to read link %s: %s", mountPath, err)
+		}
+	}
 
 	// clone the given mount
 	fdTree, err := openTree(-1, mountPath,
