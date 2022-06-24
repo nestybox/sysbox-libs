@@ -39,6 +39,7 @@ const (
 	NoShift IDShiftType = iota
 	Shiftfs
 	IDMappedMount
+	IDMappedMountOrShiftfs
 	Chown
 )
 
