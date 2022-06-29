@@ -28,8 +28,8 @@ import (
 )
 
 // CreatePidFile writes a sysbox pid to a file. If the file already exists,
-// and its pid matches a current sysbox process, then an error is returned.
-func CreatePidFile(process string, pidFile string) error {
+// and its pid matches a current sysbox program, then an error is returned.
+func CreatePidFile(program string, pidFile string) error {
 
 	pid, err := readPidFile(pidFile)
 	if err != nil && !os.IsNotExist(err) {
@@ -37,14 +37,14 @@ func CreatePidFile(process string, pidFile string) error {
 	}
 
 	if err == nil {
-		if isProcessRunning(process, pid) {
-			return fmt.Errorf("%s process is running as pid %d", process, pid)
+		if isProgramRunning(program, pid) {
+			return fmt.Errorf("%s program is running as pid %d", program, pid)
 		}
 	}
 
 	pidStr := fmt.Sprintf("%d\n", os.Getpid())
 	if err := ioutil.WriteFile(pidFile, []byte(pidStr), 0400); err != nil {
-		return fmt.Errorf("failed to write %s pid to file %s: %s", process, pidFile, err)
+		return fmt.Errorf("failed to write %s pid to file %s: %s", program, pidFile, err)
 	}
 
 	return nil
@@ -64,7 +64,7 @@ func readPidFile(pidFile string) (int, error) {
 	return strconv.Atoi(strings.TrimSpace(string(bs)))
 }
 
-func isProcessRunning(process string, pid int) bool {
+func isProgramRunning(program string, pid int) bool {
 
 	target, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
 	if err != nil {
@@ -73,8 +73,8 @@ func isProcessRunning(process string, pid int) bool {
 
 	base := filepath.Base(target)
 
-	if process != base {
-		logrus.Infof("pid %d is not associated to process %s", pid, process)
+	if program != base {
+		logrus.Infof("pid %d is not associated to process %s", pid, program)
 		return false
 	}
 
