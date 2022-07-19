@@ -27,9 +27,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// CreatePidFile writes a sysbox pid to a file. If the file already exists,
-// and its pid matches a current sysbox program, then an error is returned.
-func CreatePidFile(program string, pidFile string) error {
+func CheckPidFile(program string, pidFile string) error {
 
 	pid, err := readPidFile(pidFile)
 	if err != nil && !os.IsNotExist(err) {
@@ -40,6 +38,17 @@ func CreatePidFile(program string, pidFile string) error {
 		if isProgramRunning(program, pid) {
 			return fmt.Errorf("%s program is running as pid %d", program, pid)
 		}
+	}
+
+	return nil
+}
+
+// CreatePidFile writes a sysbox pid to a file. If the file already exists,
+// and its pid matches a current sysbox program, then an error is returned.
+func CreatePidFile(program string, pidFile string) error {
+
+	if err := CheckPidFile(program, pidFile); err != nil {
+		return err
 	}
 
 	pidStr := fmt.Sprintf("%d\n", os.Getpid())
