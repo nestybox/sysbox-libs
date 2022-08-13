@@ -132,3 +132,13 @@ func MountSliceRemoveMatch(s []specs.Mount, match func(specs.Mount) bool) []spec
 	}
 	return r
 }
+
+// MountSliceContains returns true if mount x is in slice s.
+func MountSliceContains(s []specs.Mount, x specs.Mount, match func(a, b specs.Mount) bool) bool {
+	for _, m := range s {
+		if match(m, x) {
+			return true
+		}
+	}
+	return false
+}
