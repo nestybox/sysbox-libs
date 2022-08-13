@@ -34,13 +34,13 @@ const (
 
 type DockerErr struct {
 	Code ErrCode
-	msg string
+	msg  string
 }
 
 func newDockerErr(code ErrCode, msg string) *DockerErr {
 	return &DockerErr{
 		Code: code,
-		msg: msg,
+		msg:  msg,
 	}
 }
 
