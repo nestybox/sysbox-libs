@@ -86,6 +86,20 @@ func StringSliceUniquify(s []string) []string {
 	return result
 }
 
+// finds the shortest string in the given slice
+func StringSliceFindShortest(s []string) string {
+	if len(s) == 0 {
+		return ""
+	}
+	shortest := s[0]
+	for _, str := range s {
+		if len(str) < len(shortest) {
+			shortest = str
+		}
+	}
+	return shortest
+}
+
 // Compares the given mount slices and returns true if the match
 func MountSliceEqual(a, b []specs.Mount) bool {
 	if len(a) != len(b) {
