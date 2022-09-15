@@ -64,6 +64,7 @@ var idMapMountFsBlackList = []int64{
 	unix.OVERLAYFS_SUPER_MAGIC,
 	unix.TMPFS_MAGIC,
 	unix.BTRFS_SUPER_MAGIC,
+	0x65735546, // unix.FUSE_SUPER_MAGIC
 }
 
 var idMapMountDevBlackList = []string{"/dev/null"}
