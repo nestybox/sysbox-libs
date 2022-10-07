@@ -65,6 +65,7 @@ var idMapMountFsBlackList = []int64{
 	unix.TMPFS_MAGIC,
 	unix.BTRFS_SUPER_MAGIC,
 	0x65735546, // unix.FUSE_SUPER_MAGIC
+	0x6a656a63, // FAKEOWNER (Docker Desktop's Linux VM only)
 }
 
 var idMapMountDevBlackList = []string{"/dev/null"}
