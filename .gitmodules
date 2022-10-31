@@ -1,6 +1,6 @@
 [submodule "libseccomp"]
 	path = libseccomp
-	url = git@github.com:nestybox/libseccomp.git
+	url = ../libseccomp.git
 [submodule "libseccomp-golang"]
 	path = libseccomp-golang
-	url = git@github.com:nestybox/libseccomp-golang.git
+	url = ../libseccomp-golang.git
