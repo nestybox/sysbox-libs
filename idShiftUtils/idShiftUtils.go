@@ -14,7 +14,8 @@
 // limitations under the License.
 //
 
-// Utilities for shifting user and group IDs on the file system
+// Utilities for shifting user and group IDs on the file system using chown
+// (e.g., shifting uids:gids from range [0:65536] to range [165536:231071]).
 
 package idShiftUtils
 
