@@ -1,4 +1,4 @@
-module github.com/nestybox/sysbox/lib/pidmonitor
+module github.com/nestybox/sysbox-libs/pidmonitor
 
 go 1.13
 

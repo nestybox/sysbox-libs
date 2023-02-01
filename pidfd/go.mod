@@ -1,3 +1,3 @@
-module github.com/nestybox/sysbox/lib/pidfd
+module github.com/nestybox/sysbox-libs/pidfd
 
 go 1.16

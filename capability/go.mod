@@ -1,3 +1,3 @@
-module github.com/nestybox/sysbox/capability
+module github.com/nestybox/sysbox-libs/capability
 
 go 1.14
