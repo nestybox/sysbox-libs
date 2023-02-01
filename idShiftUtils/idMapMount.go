@@ -50,9 +50,12 @@ import "C"
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 	"unsafe"
 
+	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
 )
 
@@ -61,7 +64,6 @@ import (
 // ID-mapped mounts over them).
 
 var idMapMountFsBlackList = []int64{
-	unix.OVERLAYFS_SUPER_MAGIC,
 	unix.TMPFS_MAGIC,
 	unix.BTRFS_SUPER_MAGIC,
 	0x65735546, // unix.FUSE_SUPER_MAGIC
@@ -100,7 +102,7 @@ func moveMount(fromDirFd int, fromPath string, toDirFd int, toPath string, flags
 }
 
 // ID-maps the given mountpoint, using the given userns ID mappings; both paths must be absolute.
-func IDMapMount(usernsPath, mountPath string) error {
+func IDMapMount(usernsPath, mountPath string, unmountFirst bool) error {
 
 	// open the usernsPath
 	usernsFd, err := os.Open(usernsPath)
@@ -114,6 +116,11 @@ func IDMapMount(usernsPath, mountPath string) error {
 		mountPath, err = os.Readlink(mountPath)
 		if err != nil {
 			return fmt.Errorf("Failed to read link %s: %s", mountPath, err)
+		}
+	} else {
+		mountPath, err = filepath.EvalSymlinks(mountPath)
+		if err != nil {
+			return fmt.Errorf("Failed to eval symlink on %s: %s", mountPath, err)
 		}
 	}
 
@@ -139,9 +146,11 @@ func IDMapMount(usernsPath, mountPath string) error {
 	}
 
 	// Unmount the original mountPath mount to prevent redundant / stacked mounting
-	err = unix.Unmount(mountPath, unix.MNT_DETACH)
-	if err != nil {
-		return fmt.Errorf("Failed to unmount %s: %s", mountPath, err)
+	if unmountFirst {
+		err = unix.Unmount(mountPath, unix.MNT_DETACH)
+		if err != nil {
+			return fmt.Errorf("Failed to unmount %s: %s", mountPath, err)
+		}
 	}
 
 	// Attach the clone to the to mount point
@@ -174,5 +183,70 @@ func IDMapMountSupportedOnPath(path string) (bool, error) {
 		}
 	}
 
+	return true, nil
+}
+
+// IDMapMountSupportedOnOverlayfs checks if ID-mapping is supported on overlayfs (kernel >= 5.19).
+// NOTE: adapted from github.com/containers/storage/drivers/overlay
+func IDMapMountSupportedOnOverlayfs(dir string) (bool, error) {
+
+	testDir, err := os.MkdirTemp(dir, "sysbox-ovfs-check")
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		os.RemoveAll(testDir)
+	}()
+
+	mergedDir := filepath.Join(testDir, "merged")
+	lowerDir := filepath.Join(testDir, "lower")
+	upperDir := filepath.Join(testDir, "upper")
+	workDir := filepath.Join(testDir, "work")
+
+	dirs := []string{mergedDir, lowerDir, upperDir, workDir}
+
+	for _, dir := range dirs {
+		if err := os.Mkdir(dir, 0700); err != nil {
+			return false, err
+		}
+	}
+
+	idmap := []IDMapping{
+		{
+			ContainerID: 0,
+			HostID:      0,
+			Size:        1,
+		},
+	}
+
+	// Create a userns process that simply pauses until killed
+	execFunc := func() {
+		for {
+			syscall.Syscall6(uintptr(unix.SYS_PAUSE), 0, 0, 0, 0, 0, 0)
+		}
+	}
+
+	pid, cleanupFunc, err := createUsernsProcess(idmap, idmap, execFunc)
+	if err != nil {
+		return false, err
+	}
+	defer cleanupFunc()
+
+	// Create the ID mapped mount for the overlayfs lower layer, associated with the process userns.
+	usernsPath := fmt.Sprintf("/proc/%d/ns/user", pid)
+
+	if err := IDMapMount(usernsPath, lowerDir, false); err != nil {
+		return false, errors.Wrap(err, "create mapped mount")
+	}
+	defer unix.Unmount(lowerDir, unix.MNT_DETACH)
+
+	// Finally mount overlayfs using the ID-mapped lower layer to see if it works
+	opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDir, upperDir, workDir)
+	flags := uintptr(0)
+	if err := unix.Mount("overlay", mergedDir, "overlay", flags, opts); err != nil {
+		return false, err
+	}
+
+	unix.Unmount(mergedDir, unix.MNT_DETACH)
 	return true, nil
 }

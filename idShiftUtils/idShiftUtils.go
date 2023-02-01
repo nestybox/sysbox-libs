@@ -50,6 +50,12 @@ const (
 	aclTypeDefault
 )
 
+type IDMapping struct {
+	ContainerID uint32
+	HostID      uint32
+	Size        uint32
+}
+
 // Shifts the ACL type user and group IDs by the given offset
 func shiftAclType(aclT aclType, path string, uidOffset, gidOffset int32) error {
 	var facl aclLib.ACL
