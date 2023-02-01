@@ -55,7 +55,7 @@ import (
 	"syscall"
 	"unsafe"
 
-	"github.com/nestybox/sysbox-libs/utils"
+	"github.com/nestybox/sysbox-libs/linuxUtils"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
 	"golang.org/x/sys/unix"
@@ -230,7 +230,7 @@ func IDMapMountSupportedOnOverlayfs(dir string) (bool, error) {
 		}
 	}
 
-	pid, cleanupFunc, err := utils.CreateUsernsProcess(idmap, idmap, execFunc)
+	pid, cleanupFunc, err := linuxUtils.CreateUsernsProcess(idmap, idmap, execFunc)
 	if err != nil {
 		return false, err
 	}
