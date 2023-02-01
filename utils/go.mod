@@ -1,4 +1,4 @@
-module github.com/nestybox/sysbox/utils
+module github.com/nestybox/sysbox-libs/utils
 
 go 1.14
 

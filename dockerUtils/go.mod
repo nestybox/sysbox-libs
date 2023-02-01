@@ -1,4 +1,4 @@
-module github.com/nestybox/sysbox/dockerUtils
+module github.com/nestybox/sysbox-libs/dockerUtils
 
 go 1.14
 
