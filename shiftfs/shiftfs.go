@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/nestybox/sysbox-libs/mount"
 	"golang.org/x/sys/unix"
 )
 
