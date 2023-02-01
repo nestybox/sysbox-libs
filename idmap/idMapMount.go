@@ -1,5 +1,5 @@
 //
-// Copyright 2019-2022 Nestybox, Inc.
+// Copyright 2019-2023 Nestybox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 //go:build linux && idmapped_mnt && cgo
 // +build linux,idmapped_mnt,cgo
 
-package idShiftUtils
+package idMap
 
 // #define _GNU_SOURCE
 // #include <errno.h>
@@ -186,7 +186,9 @@ func IDMapMountSupportedOnPath(path string) (bool, error) {
 	return true, nil
 }
 
-// IDMapMountSupportedOnOverlayfs checks if ID-mapping is supported on overlayfs (kernel >= 5.19).
+// IDMapMountSupportedOnOverlayfs checks if ID-mapping is supported on overlayfs
+// by running a quick test.
+//
 // NOTE: adapted from github.com/containers/storage/drivers/overlay
 func IDMapMountSupportedOnOverlayfs(dir string) (bool, error) {
 

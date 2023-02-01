@@ -1,5 +1,5 @@
 //
-// Copyright 2019-2022 Nestybox, Inc.
+// Copyright 2023 Nestybox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,23 +14,29 @@
 // limitations under the License.
 //
 
-//go:build !linux || !idmapped_mnt || !cgo
-// +build !linux !idmapped_mnt !cgo
-
-package idShiftUtils
+package idMap
 
 import (
-	"fmt"
+	"github.com/nestybox/sysbox-libs/utils"
+	"testing"
 )
 
-func IDMapMount(usernsPath, mountPath string, unmountFirst bool) error {
-	return fmt.Errorf("idmapped mount unsupported in this Sysbox build.")
-}
+func TestIDMapMountSupportedOnOverlayfs(t *testing.T) {
 
-func IDMapMountSupportedOnPath(path string) (bool, error) {
-	return false, nil
-}
+	kernelSupportsIDMapping, err := utils.KernelSupportsIDMappedMounts()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-func IDMapMountSupportedOnOverlayfs(dir string) (bool, error) {
-	return false, nil
+	if kernelSupportsIDMapping {
+		dir := "/var/lib/sysbox"
+		supported, err := IDMapMountSupportedOnOverlayfs(dir)
+		if err != nil {
+			t.Fatalf("IDMapMountSupportedOnOverlayfs() failed with error: %s", err)
+		}
+
+		if !supported {
+			t.Fatal("IDMapMountSupportedOnOverlayfs() returned false, expected true.")
+		}
+	}
 }
