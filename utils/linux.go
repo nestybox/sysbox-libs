@@ -20,12 +20,15 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/spf13/afero"
 	"golang.org/x/sys/unix"
 )
@@ -281,4 +284,49 @@ func KernelModSupported(mod string) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// CreateUsernsProcess forks the current process into a new Linux
+// user-namespace, using the given the ID mappings. Returns the pid of the new
+// process and a "kill" function (so that the caller can kill the child when
+// desired). The new process executes the given function.
+//
+// NOTE: adapted from github.com/containers/storage/drivers/overlay
+func CreateUsernsProcess(uidMaps []specs.LinuxIDMapping, gidMaps []specs.LinuxIDMapping, execFunc func()) (int, func(), error) {
+
+	pid, _, err := syscall.Syscall6(uintptr(unix.SYS_CLONE), unix.CLONE_NEWUSER|uintptr(unix.SIGCHLD), 0, 0, 0, 0, 0)
+	if err != 0 {
+		return -1, nil, err
+	}
+
+	if pid == 0 {
+		// If the parent dies, the child gets SIGKILL
+		unix.Prctl(unix.PR_SET_PDEATHSIG, uintptr(unix.SIGKILL), 0, 0, 0)
+		execFunc()
+	}
+
+	cleanupFunc := func() {
+		unix.Kill(int(pid), unix.SIGKILL)
+		unix.Wait4(int(pid), nil, 0, nil)
+	}
+
+	writeMappings := func(fname string, idmap []specs.LinuxIDMapping) error {
+		mappings := ""
+		for _, m := range idmap {
+			mappings = mappings + fmt.Sprintf("%d %d %d\n", m.ContainerID, m.HostID, m.Size)
+		}
+		return ioutil.WriteFile(fmt.Sprintf("/proc/%d/%s", pid, fname), []byte(mappings), 0600)
+	}
+
+	if err := writeMappings("uid_map", uidMaps); err != nil {
+		cleanupFunc()
+		return -1, nil, err
+	}
+
+	if err := writeMappings("gid_map", gidMaps); err != nil {
+		cleanupFunc()
+		return -1, nil, err
+	}
+
+	return int(pid), cleanupFunc, nil
 }
