@@ -43,6 +43,7 @@ var unixFsNameTable = map[int64]string{
 	unix.EFIVARFS_MAGIC:        "efivarfs",
 	unix.EFS_SUPER_MAGIC:       "efs",
 	unix.EROFS_SUPER_MAGIC_V1:  "erofs",
+	unix.EXT4_SUPER_MAGIC:      "ext4",
 	unix.F2FS_SUPER_MAGIC:      "f2fs",
 	unix.FUTEXFS_SUPER_MAGIC:   "futexfs",
 	unix.HOSTFS_SUPER_MAGIC:    "hostfs",
