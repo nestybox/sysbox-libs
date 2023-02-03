@@ -19,6 +19,7 @@ package linuxUtils
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -27,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/spf13/afero"
@@ -239,30 +241,6 @@ func GetLinuxHeaderPath(distro string) (string, error) {
 	return path, nil
 }
 
-func KernelSupportsIDMappedMounts() (bool, error) {
-	var major, minor int
-
-	rel, err := GetKernelRelease()
-	if err != nil {
-		return false, err
-	}
-
-	major, minor, err = ParseKernelRelease(rel)
-	if err != nil {
-		return false, err
-	}
-
-	// ID-Mapped mounts requires Linux kernel >= 5.12
-
-	if major < 5 {
-		return false, nil
-	} else if major == 5 && minor < 12 {
-		return false, nil
-	} else {
-		return true, nil
-	}
-}
-
 // KernelModSupported returns nil if the given module is loaded in the kernel.
 func KernelModSupported(mod string) (bool, error) {
 
@@ -287,43 +265,101 @@ func KernelModSupported(mod string) (bool, error) {
 }
 
 // CreateUsernsProcess forks the current process into a new Linux
-// user-namespace, using the given the ID mappings. Returns the pid of the new
-// process and a "kill" function (so that the caller can kill the child when
-// desired). The new process executes the given function.
+// user-namespace, using the given the ID mapping (common to both uid and
+// gid). Returns the pid of the new process and a "kill" function (so that the
+// caller can kill the child when desired). The new process executes the given
+// function.
 //
 // NOTE: adapted from github.com/containers/storage/drivers/overlay
-func CreateUsernsProcess(uidMaps []specs.LinuxIDMapping, gidMaps []specs.LinuxIDMapping, execFunc func()) (int, func(), error) {
+func CreateUsernsProcess(idMap *specs.LinuxIDMapping, execFunc func(), cwd string, newMountNs bool) (int, func(), error) {
 
-	pid, _, err := syscall.Syscall6(uintptr(unix.SYS_CLONE), unix.CLONE_NEWUSER|uintptr(unix.SIGCHLD), 0, 0, 0, 0, 0)
-	if err != 0 {
-		return -1, nil, err
+	currCwd, err := os.Getwd()
+	if err != nil {
+		return 0, nil, err
+	}
+
+	if err := os.Chdir(cwd); err != nil {
+		return 0, nil, err
+	}
+	defer os.Chdir(currCwd)
+
+	flags := unix.CLONE_NEWUSER | uintptr(unix.SIGCHLD)
+	if newMountNs {
+		flags = flags | unix.CLONE_NEWNS
+	}
+
+	pid, _, err2 := syscall.Syscall6(uintptr(unix.SYS_CLONE), flags, 0, 0, 0, 0, 0)
+	if err2 != 0 {
+		return -1, nil, err2
 	}
 
 	if pid == 0 {
-		// If the parent dies, the child gets SIGKILL
+		// We are in the child; if our parent dies, ask the kernel to kill us
 		unix.Prctl(unix.PR_SET_PDEATHSIG, uintptr(unix.SIGKILL), 0, 0, 0)
+
+		// Wait for the parent to do the user-ns uid & gid mappings (and timeout in 3 secs)
+		readIDMapFile := func(fname string) (*specs.LinuxIDMapping, error) {
+			data, err := os.ReadFile(fname)
+			if err != nil {
+				return nil, err
+			}
+			fields := strings.Fields(string(data))
+			if len(fields) < 3 {
+				return nil, errors.New("invalid mapping")
+			}
+			containerID, _ := strconv.Atoi(fields[0])
+			hostID, _ := strconv.Atoi(fields[1])
+			size, _ := strconv.Atoi(fields[2])
+
+			return &specs.LinuxIDMapping{
+				ContainerID: uint32(containerID),
+				HostID:      uint32(hostID),
+				Size:        uint32(size),
+			}, nil
+		}
+
+		mapFiles := []string{"uid_map", "gid_map"}
+		foundMapping := false
+
+		for _, f := range mapFiles {
+			for i := 0; i < 30; i++ {
+				m, err := readIDMapFile(fmt.Sprintf("/proc/self/%s", f))
+				if err != nil {
+					continue
+				}
+				if m.ContainerID == idMap.ContainerID &&
+					m.HostID == idMap.HostID &&
+					m.Size == idMap.Size {
+					foundMapping = true
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
+			}
+			if !foundMapping {
+				os.Exit(1)
+			}
+		}
+
+		// Now execute the function we were given
 		execFunc()
 	}
 
 	cleanupFunc := func() {
 		unix.Kill(int(pid), unix.SIGKILL)
-		unix.Wait4(int(pid), nil, 0, nil)
 	}
 
-	writeMappings := func(fname string, idmap []specs.LinuxIDMapping) error {
-		mappings := ""
-		for _, m := range idmap {
-			mappings = mappings + fmt.Sprintf("%d %d %d\n", m.ContainerID, m.HostID, m.Size)
-		}
-		return ioutil.WriteFile(fmt.Sprintf("/proc/%d/%s", pid, fname), []byte(mappings), 0600)
+	// Write the user-ns mappings (the child is waiting for them)
+	writeMapping := func(fname string, idmap *specs.LinuxIDMapping) error {
+		mapping := fmt.Sprintf("%d %d %d\n", idmap.ContainerID, idmap.HostID, idmap.Size)
+		return ioutil.WriteFile(fmt.Sprintf("/proc/%d/%s", pid, fname), []byte(mapping), 0600)
 	}
 
-	if err := writeMappings("uid_map", uidMaps); err != nil {
+	if err := writeMapping("uid_map", idMap); err != nil {
 		cleanupFunc()
 		return -1, nil, err
 	}
 
-	if err := writeMappings("gid_map", gidMaps); err != nil {
+	if err := writeMapping("gid_map", idMap); err != nil {
 		cleanupFunc()
 		return -1, nil, err
 	}
