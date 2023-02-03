@@ -18,9 +18,14 @@ package shiftfs
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
+	"syscall"
 
+	"github.com/nestybox/sysbox-libs/linuxUtils"
 	"github.com/nestybox/sysbox-libs/mount"
+	"github.com/nestybox/sysbox-libs/utils"
+	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"golang.org/x/sys/unix"
 )
 
@@ -65,4 +70,138 @@ func Mounted(path string, mounts []*mount.Info) (bool, error) {
 	}
 
 	return mount.MountedWithFs(realPath, "shiftfs", mounts)
+}
+
+// ShiftfsSupported checks if shiftfs is supported on the host.
+func ShiftfsSupported(dir string) (bool, error) {
+	return runShiftsCheckOnHost(dir, false)
+}
+
+// ShiftfsSupported checks if shiftfs-on-overlayfs is supported on the host.
+func ShiftfsSupportedOnOverlayfs(dir string) (bool, error) {
+	return runShiftsCheckOnHost(dir, true)
+}
+
+// runShiftfsCheckOnHost runs a quick test on the host to check if shiftfs is
+// supported. dir is the path where the test will run, and checkOnOverlayfs
+// indicates if the test should check shiftfs-on-overlayfs.
+func runShiftsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
+
+	fsName, err := utils.GetFsName(dir)
+	if err != nil {
+		return false, err
+	}
+
+	if fsName == "overlayfs" || fsName == "tmpfs" {
+		return false, fmt.Errorf("test dir (%s) must not be on overlayfs or tmpfs", dir)
+	}
+
+	tmpDir, err := os.MkdirTemp(dir, "sysbox-shiftfs-check")
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		os.RemoveAll(tmpDir)
+	}()
+
+	if err := os.Chmod(tmpDir, 0755); err != nil {
+		return false, err
+	}
+
+	testDir := filepath.Join(tmpDir, "test")
+	if err := os.Mkdir(testDir, 0755); err != nil {
+		return false, err
+	}
+
+	if checkOnOverlayfs {
+		lowerDir := filepath.Join(tmpDir, "lower")
+		upperDir := filepath.Join(tmpDir, "upper")
+		workDir := filepath.Join(tmpDir, "work")
+
+		dirs := []string{lowerDir, upperDir, workDir}
+		for _, dir := range dirs {
+			if err := os.Mkdir(dir, 0755); err != nil {
+				return false, err
+			}
+		}
+
+		opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDir, upperDir, workDir)
+		flags := uintptr(0)
+		if err := unix.Mount("overlay", testDir, "overlay", flags, opts); err != nil {
+			return false, err
+		}
+		defer unix.Unmount(testDir, unix.MNT_DETACH)
+	}
+
+	// Create the shiftfs mark on the test dir
+	if err := Mark(testDir, testDir); err != nil {
+		return false, err
+	}
+	defer Unmount(testDir)
+
+	// Since shiftfs only makes sense within a user-ns, we will fork a child
+	// process into a new user-ns and have it mount shiftfs and verify it
+	// work. execFunc is the function the child will execute.
+	execFunc := func() {
+		if err := unix.Setresuid(0, 0, 0); err != nil {
+			os.Exit(1)
+		}
+		if err := unix.Setresgid(0, 0, 0); err != nil {
+			os.Exit(1)
+		}
+		if err := Mount(testDir, testDir); err != nil {
+			os.Exit(1)
+		}
+
+		testfile := filepath.Join(testDir, "testfile")
+		testfile2 := filepath.Join(testDir, "testfile2")
+
+		_, err := os.Create(testfile)
+		if err != nil {
+			os.Exit(1)
+		}
+
+		// This operation will fail with EOVERFLOW if shiftfs is buggy in the kernel
+		if err := os.Rename(testfile, testfile2); err != nil {
+			os.Remove(testfile)
+			os.Exit(2)
+		}
+
+		os.Remove(testfile2)
+		os.Exit(0)
+	}
+
+	// Fork the child process into a new user-ns (and mount-ns too)
+	idmap := &specs.LinuxIDMapping{
+		ContainerID: 0,
+		HostID:      165536,
+		Size:        65536,
+	}
+
+	pid, cleanupFunc, err := linuxUtils.CreateUsernsProcess(idmap, execFunc, testDir, true)
+	if err != nil {
+		return false, err
+	}
+	defer cleanupFunc()
+
+	// Wait for the child process to exit
+	var wstatus syscall.WaitStatus
+	var rusage syscall.Rusage
+
+	_, err = syscall.Wait4(pid, &wstatus, 0, &rusage)
+	if err != nil {
+		return false, err
+	}
+
+	if !wstatus.Exited() {
+		return false, fmt.Errorf("child process did not exit normally")
+	}
+
+	exitStatus := wstatus.ExitStatus()
+
+	if exitStatus != 0 {
+		return false, nil
+	}
+
+	return true, nil
 }
