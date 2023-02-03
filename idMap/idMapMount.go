@@ -165,6 +165,120 @@ func IDMapMount(usernsPath, mountPath string, unmountFirst bool) error {
 	return nil
 }
 
+// IDMapMountSupported checks if ID-mapping is supported on the host.
+func IDMapMountSupported(dir string) (bool, error) {
+
+	// ID-Mapped mounts requires Linux kernel >= 5.12
+	kernelOK, err := checkKernelVersion(5, 12)
+	if err != nil {
+		return false, err
+	}
+
+	if !kernelOK {
+		return false, nil
+	}
+
+	return runIDMapMountCheckOnHost(dir, false)
+}
+
+// IDMapMountSupportedOnOverlayfs checks if ID-mapping is supported on overlayfs.
+func IDMapMountSupportedOnOverlayfs(dir string) (bool, error) {
+
+	// ID-Mapped mounts on overlayfs requires Linux kernel >= 5.19
+	kernelOK, err := checkKernelVersion(5, 19)
+	if err != nil {
+		return false, err
+	}
+
+	if !kernelOK {
+		return false, nil
+	}
+
+	return runIDMapMountCheckOnHost(dir, true)
+}
+
+// runIDMapMountCheckOnHost runs a quick test on the host to check if ID-mapping is
+// supported. dir is the path where the test will run, and checkOnOverlayfs
+// indicates if the test should check idmaping on overlayfs lower layers.
+func runIDMapMountCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
+	var (
+		lowerDir, upperDir, workDir, idMapDir string
+	)
+
+	tmpDir, err := os.MkdirTemp(dir, "sysbox-ovfs-check")
+	if err != nil {
+		return false, err
+	}
+	defer func() {
+		os.RemoveAll(tmpDir)
+	}()
+
+	testDir := filepath.Join(tmpDir, "merged")
+	if err := os.Mkdir(testDir, 0700); err != nil {
+		return false, err
+	}
+
+	if checkOnOverlayfs {
+		lowerDir = filepath.Join(tmpDir, "lower")
+		upperDir = filepath.Join(tmpDir, "upper")
+		workDir = filepath.Join(tmpDir, "work")
+
+		dirs := []string{lowerDir, upperDir, workDir}
+		for _, dir := range dirs {
+			if err := os.Mkdir(dir, 0700); err != nil {
+				return false, err
+			}
+		}
+	}
+
+	// Create a userns process that simply pauses until killed
+	execFunc := func() {
+		for {
+			syscall.Syscall6(uintptr(unix.SYS_PAUSE), 0, 0, 0, 0, 0, 0)
+		}
+	}
+
+	idmap := &specs.LinuxIDMapping{
+		ContainerID: 0,
+		HostID:      0,
+		Size:        1,
+	}
+
+	pid, cleanupFunc, err := linuxUtils.CreateUsernsProcess(idmap, execFunc, testDir, false)
+	if err != nil {
+		return false, err
+	}
+	defer cleanupFunc()
+
+	// Create the ID mapped mount associated with the child process user-ns
+	usernsPath := fmt.Sprintf("/proc/%d/ns/user", pid)
+
+	if checkOnOverlayfs {
+		idMapDir = lowerDir
+	} else {
+		idMapDir = testDir
+	}
+
+	if err := IDMapMount(usernsPath, idMapDir, false); err != nil {
+		return false, errors.Wrap(err, "create mapped mount")
+	}
+	defer unix.Unmount(idMapDir, unix.MNT_DETACH)
+
+	if checkOnOverlayfs {
+		opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDir, upperDir, workDir)
+		flags := uintptr(0)
+		if err := unix.Mount("overlay", testDir, "overlay", flags, opts); err != nil {
+			return false, err
+		}
+		unix.Unmount(testDir, unix.MNT_DETACH)
+		return true, nil
+	}
+
+	return true, nil
+}
+
+// Checkf if the dir at the given path can be ID-mapped based on the underlying
+// filesystem.
 func IDMapMountSupportedOnPath(path string) (bool, error) {
 	var fs unix.Statfs_t
 
@@ -185,72 +299,5 @@ func IDMapMountSupportedOnPath(path string) (bool, error) {
 		}
 	}
 
-	return true, nil
-}
-
-// IDMapMountSupportedOnOverlayfs checks if ID-mapping is supported on overlayfs
-// by running a quick test.
-//
-// NOTE: adapted from github.com/containers/storage/drivers/overlay
-func IDMapMountSupportedOnOverlayfs(dir string) (bool, error) {
-
-	testDir, err := os.MkdirTemp(dir, "sysbox-ovfs-check")
-	if err != nil {
-		return false, err
-	}
-	defer func() {
-		os.RemoveAll(testDir)
-	}()
-
-	mergedDir := filepath.Join(testDir, "merged")
-	lowerDir := filepath.Join(testDir, "lower")
-	upperDir := filepath.Join(testDir, "upper")
-	workDir := filepath.Join(testDir, "work")
-
-	dirs := []string{mergedDir, lowerDir, upperDir, workDir}
-
-	for _, dir := range dirs {
-		if err := os.Mkdir(dir, 0700); err != nil {
-			return false, err
-		}
-	}
-
-	idmap := []specs.LinuxIDMapping{
-		{
-			ContainerID: 0,
-			HostID:      0,
-			Size:        1,
-		},
-	}
-
-	// Create a userns process that simply pauses until killed
-	execFunc := func() {
-		for {
-			syscall.Syscall6(uintptr(unix.SYS_PAUSE), 0, 0, 0, 0, 0, 0)
-		}
-	}
-
-	pid, cleanupFunc, err := linuxUtils.CreateUsernsProcess(idmap, idmap, execFunc)
-	if err != nil {
-		return false, err
-	}
-	defer cleanupFunc()
-
-	// Create the ID mapped mount for the overlayfs lower layer, associated with the process userns.
-	usernsPath := fmt.Sprintf("/proc/%d/ns/user", pid)
-
-	if err := IDMapMount(usernsPath, lowerDir, false); err != nil {
-		return false, errors.Wrap(err, "create mapped mount")
-	}
-	defer unix.Unmount(lowerDir, unix.MNT_DETACH)
-
-	// Finally mount overlayfs using the ID-mapped lower layer to see if it works
-	opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDir, upperDir, workDir)
-	flags := uintptr(0)
-	if err := unix.Mount("overlay", mergedDir, "overlay", flags, opts); err != nil {
-		return false, err
-	}
-
-	unix.Unmount(mergedDir, unix.MNT_DETACH)
 	return true, nil
 }

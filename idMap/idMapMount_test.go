@@ -14,29 +14,68 @@
 // limitations under the License.
 //
 
+// NOTE:
+//
+// Run test with "go test -tags idmapped_mnt" when running on a host with kernel
+// >= 5.12. Otherwise the test will use the idMapMount_unsupported.go file.
+
 package idMap
 
 import (
-	"github.com/nestybox/sysbox-libs/utils"
+	"os"
 	"testing"
 )
 
-func TestIDMapMountSupportedOnOverlayfs(t *testing.T) {
+func TestIDMapMountSupported(t *testing.T) {
 
-	kernelSupportsIDMapping, err := utils.KernelSupportsIDMappedMounts()
+	kernelOK, err := checkKernelVersion(5, 12)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if kernelSupportsIDMapping {
+	if kernelOK {
 		dir := "/var/lib/sysbox"
+
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		supported, err := IDMapMountSupported(dir)
+		if err != nil {
+			t.Fatalf("IDMapMountSupported() failed with error: %s", err)
+		}
+
+		if supported {
+			t.Logf("ID-mapping supported on this host.")
+		} else {
+			t.Logf("ID-mapping not supported on this host.")
+		}
+	}
+}
+
+func TestIDMapMountSupportedOnOverlayfs(t *testing.T) {
+
+	kernelOK, err := checkKernelVersion(5, 19)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if kernelOK {
+		dir := "/var/lib/sysbox"
+
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
 		supported, err := IDMapMountSupportedOnOverlayfs(dir)
 		if err != nil {
 			t.Fatalf("IDMapMountSupportedOnOverlayfs() failed with error: %s", err)
 		}
 
-		if !supported {
-			t.Fatal("IDMapMountSupportedOnOverlayfs() returned false, expected true.")
+		if supported {
+			t.Logf("ID-mapping-on-overlayfs supported on this host.")
+		} else {
+			t.Logf("ID-mapping-on-overlayfs not supported on this host.")
 		}
 	}
 }

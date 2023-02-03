@@ -27,10 +27,14 @@ func IDMapMount(usernsPath, mountPath string, unmountFirst bool) error {
 	return fmt.Errorf("idmapped mount unsupported in this Sysbox build.")
 }
 
-func IDMapMountSupportedOnPath(path string) (bool, error) {
+func IDMapMountSupported(dir string) (bool, error) {
 	return false, nil
 }
 
 func IDMapMountSupportedOnOverlayfs(dir string) (bool, error) {
+	return false, nil
+}
+
+func IDMapMountSupportedOnPath(path string) (bool, error) {
 	return false, nil
 }
