@@ -181,10 +181,11 @@ func IDMapMountSupported(dir string) (bool, error) {
 	return runIDMapMountCheckOnHost(dir, false)
 }
 
-// IDMapMountSupportedOnOverlayfs checks if ID-mapping is supported on overlayfs.
-func IDMapMountSupportedOnOverlayfs(dir string) (bool, error) {
+// OverlayfsOnIDMapMountSupported checks if overlayfs over ID-mapped lower
+// layers is supported on the host.
+func OverlayfsOnIDMapMountSupported(dir string) (bool, error) {
 
-	// ID-Mapped mounts on overlayfs requires Linux kernel >= 5.19
+	// overlayfs on ID-mapped lower layers requires Linux kernel >= 5.19
 	kernelOK, err := checkKernelVersion(5, 19)
 	if err != nil {
 		return false, err
@@ -198,8 +199,8 @@ func IDMapMountSupportedOnOverlayfs(dir string) (bool, error) {
 }
 
 // runIDMapMountCheckOnHost runs a quick test on the host to check if ID-mapping is
-// supported. dir is the path where the test will run, and checkOnOverlayfs
-// indicates if the test should check idmaping on overlayfs lower layers.
+// supported. dir is the path where the test will run. If checkOnOverlayfs
+// is true, the test checks if overlayfs supports ID-mapped lower layers.
 func runIDMapMountCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 	var (
 		lowerDir, upperDir, workDir, idMapDir string
