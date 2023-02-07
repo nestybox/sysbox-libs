@@ -344,7 +344,7 @@ func CreateUsernsProcess(idMap *specs.LinuxIDMapping, execFunc func(), cwd strin
 		execFunc()
 	}
 
-	cleanupFunc := func() {
+	childKillFunc := func() {
 		unix.Kill(int(pid), unix.SIGKILL)
 	}
 
@@ -355,14 +355,14 @@ func CreateUsernsProcess(idMap *specs.LinuxIDMapping, execFunc func(), cwd strin
 	}
 
 	if err := writeMapping("uid_map", idMap); err != nil {
-		cleanupFunc()
+		childKillFunc()
 		return -1, nil, err
 	}
 
 	if err := writeMapping("gid_map", idMap); err != nil {
-		cleanupFunc()
+		childKillFunc()
 		return -1, nil, err
 	}
 
-	return int(pid), cleanupFunc, nil
+	return int(pid), childKillFunc, nil
 }

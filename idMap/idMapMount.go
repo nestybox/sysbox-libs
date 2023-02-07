@@ -245,11 +245,17 @@ func runIDMapMountCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 		Size:        1,
 	}
 
-	pid, cleanupFunc, err := linuxUtils.CreateUsernsProcess(idmap, execFunc, testDir, false)
+	pid, childKill, err := linuxUtils.CreateUsernsProcess(idmap, execFunc, testDir, false)
 	if err != nil {
 		return false, err
 	}
-	defer cleanupFunc()
+
+	defer func() {
+		var wstatus syscall.WaitStatus
+		var rusage syscall.Rusage
+		childKill()
+		syscall.Wait4(pid, &wstatus, 0, &rusage)
+	}()
 
 	// Create the ID mapped mount associated with the child process user-ns
 	usernsPath := fmt.Sprintf("/proc/%d/ns/user", pid)
