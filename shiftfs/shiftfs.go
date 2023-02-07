@@ -178,11 +178,10 @@ func runShiftsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 		Size:        65536,
 	}
 
-	pid, cleanupFunc, err := linuxUtils.CreateUsernsProcess(idmap, execFunc, testDir, true)
+	pid, _, err := linuxUtils.CreateUsernsProcess(idmap, execFunc, testDir, true)
 	if err != nil {
 		return false, err
 	}
-	defer cleanupFunc()
 
 	// Wait for the child process to exit
 	var wstatus syscall.WaitStatus
