@@ -64,6 +64,8 @@ import (
 // The following are filesystems and host directories where we never ID-map
 // mount as it causes functional problems (i.e., the kernel does not yet support
 // ID-mapped mounts over them).
+//
+// TODO: remove this blacklist and instead run experiments on each fs
 
 var idMapMountFsBlackList = []int64{
 	unix.TMPFS_MAGIC,
