@@ -38,3 +38,7 @@ func IDMapMountSupportedOnOverlayfs(dir string) (bool, error) {
 func IDMapMountSupportedOnPath(path string) (bool, error) {
 	return false, nil
 }
+
+func OverlayfsOnIDMapMountSupported(dir string) (bool, error) {
+	return false, nil
+}
