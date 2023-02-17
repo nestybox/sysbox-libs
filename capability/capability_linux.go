@@ -398,7 +398,7 @@ func (c *capsV3) LoadOriginal() (err error) {
 
 // Sysbox implementation of the original Load() method (see above). For
 // efficiency purposes, in this case we are not parsing 'status' file to
-// extract 'ambient' and 'bonding' capabilities.
+// extract 'ambient' and 'bounding' capabilities.
 func (c *capsV3) Load() (err error) {
 	err = capget(&c.hdr, &c.data[0])
 	if err != nil {
