@@ -237,7 +237,8 @@ func runIDMapMountCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 	// Create a userns process that simply pauses until killed
 	execFunc := func() {
 		for {
-			syscall.Syscall6(uintptr(unix.SYS_PAUSE), 0, 0, 0, 0, 0, 0)
+			c := make(chan struct{})
+			<-c
 		}
 	}
 
