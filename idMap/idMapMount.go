@@ -70,6 +70,7 @@ import (
 var idMapMountFsBlackList = []int64{
 	unix.TMPFS_MAGIC,
 	unix.BTRFS_SUPER_MAGIC,
+	unix.OVERLAYFS_SUPER_MAGIC,
 	0x65735546, // unix.FUSE_SUPER_MAGIC
 	0x6a656a63, // FAKEOWNER (Docker Desktop's Linux VM only)
 }
@@ -287,8 +288,7 @@ func runIDMapMountCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 	return true, nil
 }
 
-// Checkf if the dir at the given path can be ID-mapped based on the underlying
-// filesystem.
+// Checkf if the dir at the given path can be ID-mapped based on the underlying filesystem.
 func IDMapMountSupportedOnPath(path string) (bool, error) {
 	var fs unix.Statfs_t
 
