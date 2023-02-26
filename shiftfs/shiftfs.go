@@ -31,6 +31,12 @@ import (
 
 const SHIFTFS_MAGIC int64 = 0x6a656a62
 
+// Describes a shiftfs mount point
+type MountPoint struct {
+	Source   string
+	Readonly bool
+}
+
 // Mark performs a shiftfs mark-mount for path on the given markPath
 // (e.g., Mark("/a/b", "/c/d") causes "b" to be mounted on "d" and
 // "d" to have a shiftfs mark).
