@@ -17,9 +17,11 @@
 package shiftfs
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/nestybox/sysbox-libs/linuxUtils"
@@ -80,18 +82,27 @@ func Mounted(path string, mounts []*mount.Info) (bool, error) {
 
 // ShiftfsSupported checks if shiftfs is supported on the host.
 func ShiftfsSupported(dir string) (bool, error) {
-	return runShiftsCheckOnHost(dir, false)
+	return runShiftfsCheckOnHost(dir, false)
 }
 
 // ShiftfsSupported checks if shiftfs-on-overlayfs is supported on the host.
 func ShiftfsSupportedOnOverlayfs(dir string) (bool, error) {
-	return runShiftsCheckOnHost(dir, true)
+	return runShiftfsCheckOnHost(dir, true)
 }
 
 // runShiftfsCheckOnHost runs a quick test on the host to check if shiftfs is
 // supported. dir is the path where the test will run, and checkOnOverlayfs
 // indicates if the test should check shiftfs-on-overlayfs.
-func runShiftsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
+func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
+
+	shiftfsModPresent, err := probeShiftfsMod()
+	if err != nil {
+		return false, err
+	}
+
+	if !shiftfsModPresent {
+		return false, nil
+	}
 
 	fsName, err := utils.GetFsName(dir)
 	if err != nil {
@@ -209,4 +220,34 @@ func runShiftsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func probeShiftfsMod() (bool, error) {
+
+	file, err := os.Open("/proc/modules")
+	if err != nil {
+		return false, err
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	found := false
+
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "shiftfs") {
+			found = true
+			break
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		return false, err
+	}
+
+	if found {
+		return true, nil
+	}
+
+	return false, nil
 }
