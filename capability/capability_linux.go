@@ -84,7 +84,7 @@ func initLastCap() error {
 	return nil
 }
 
-func mkStringCap(c Capabilities, which CapType) (ret string) {
+func mkStringCap(c Capabilities, which CapType, format CapFormat) (ret string) {
 	for i, first := Cap(0), true; i <= CAP_LAST_CAP; i++ {
 		if !c.Get(which, i) {
 			continue
@@ -94,12 +94,16 @@ func mkStringCap(c Capabilities, which CapType) (ret string) {
 		} else {
 			ret += ", "
 		}
-		ret += i.String()
+		if format == OCI_STRING {
+			ret += i.OCIString()
+		} else {
+			ret += i.String()
+		}
 	}
 	return
 }
 
-func mkString(c Capabilities, max CapType) (ret string) {
+func mkString(c Capabilities, max CapType, format CapFormat) (ret string) {
 	ret = "{"
 	for i := CapType(1); i <= max; i <<= 1 {
 		ret += " " + i.String() + "=\""
@@ -108,7 +112,7 @@ func mkString(c Capabilities, max CapType) (ret string) {
 		} else if c.Full(i) {
 			ret += "full"
 		} else {
-			ret += c.StringCap(i)
+			ret += c.StringCap(i, format)
 		}
 		ret += "\""
 	}
@@ -347,12 +351,12 @@ func (c *capsV3) Clear(kind CapType) {
 	}
 }
 
-func (c *capsV3) StringCap(which CapType) (ret string) {
-	return mkStringCap(c, which)
+func (c *capsV3) StringCap(which CapType, format CapFormat) (ret string) {
+	return mkStringCap(c, which, format)
 }
 
-func (c *capsV3) String() (ret string) {
-	return mkString(c, BOUNDING)
+func (c *capsV3) String(format CapFormat) (ret string) {
+	return mkString(c, BOUNDING, format)
 }
 
 func (c *capsV3) LoadOriginal() (err error) {
@@ -614,12 +618,12 @@ func (c *capsFile) Clear(kind CapType) {
 	}
 }
 
-func (c *capsFile) StringCap(which CapType) (ret string) {
-	return mkStringCap(c, which)
+func (c *capsFile) StringCap(which CapType, format CapFormat) (ret string) {
+	return mkStringCap(c, which, format)
 }
 
-func (c *capsFile) String() (ret string) {
-	return mkString(c, INHERITABLE)
+func (c *capsFile) String(format CapFormat) (ret string) {
+	return mkString(c, INHERITABLE, format)
 }
 
 func (c *capsFile) Load() (err error) {
