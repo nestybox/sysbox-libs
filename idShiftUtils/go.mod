@@ -8,7 +8,7 @@ require (
 	github.com/karrick/godirwalk v1.16.1
 	github.com/nestybox/sysbox-libs/utils v0.0.0-00010101000000-000000000000
 	github.com/sirupsen/logrus v1.7.0
-	golang.org/x/sys v0.0.0-20211216021012-1d35b9e2eb4e
+	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad
 )
 
 require (
