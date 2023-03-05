@@ -19,41 +19,12 @@
 
 package idMap
 
-// #define _GNU_SOURCE
-// #include <errno.h>
-// #include <fcntl.h>
-// #include <getopt.h>
-// #include <linux/mount.h>
-// #include <linux/types.h>
-// #include <stdbool.h>
-// #include <stdio.h>
-// #include <stdlib.h>
-// #include <string.h>
-// #include <sys/syscall.h>
-// #include <unistd.h>
-//
-// static inline int
-// open_tree(int dirfd, const char *filename, unsigned int flags)
-// {
-//     return syscall(SYS_open_tree, dirfd, filename, flags);
-// }
-//
-// static inline int
-// move_mount(int from_dirfd, const char *from_pathname,
-//            int to_dirfd, const char *to_pathname, unsigned int flags)
-// {
-//     return syscall(SYS_move_mount, from_dirfd, from_pathname,
-//                    to_dirfd, to_pathname, flags);
-// }
-import "C"
-
 import (
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"syscall"
-	"unsafe"
 
 	"github.com/nestybox/sysbox-libs/linuxUtils"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -76,35 +47,6 @@ var idMapMountFsBlackList = []int64{
 }
 
 var idMapMountDevBlackList = []string{"/dev/null"}
-
-// Opens a mount tree (wrapper for open_tree() syscall).
-func openTree(dirFd int, path string, flags uint) (int, error) {
-	cPath := C.CString(path)
-
-	fdTree, err := C.open_tree(C.int(dirFd), cPath, C.uint(flags))
-	if err != nil {
-		return -1, err
-	}
-
-	C.free(unsafe.Pointer(cPath))
-	return int(fdTree), nil
-}
-
-// Moves a mount (wrapper for move_mount() syscall).
-func moveMount(fromDirFd int, fromPath string, toDirFd int, toPath string, flags uint) error {
-	cFromPath := C.CString(fromPath)
-	cToPath := C.CString(toPath)
-
-	_, err := C.move_mount(C.int(fromDirFd), cFromPath, C.int(toDirFd), cToPath, C.uint(flags))
-	if err != nil {
-		return err
-	}
-
-	C.free(unsafe.Pointer(cFromPath))
-	C.free(unsafe.Pointer(cToPath))
-
-	return nil
-}
 
 // ID-maps the given mountpoint, using the given userns ID mappings; both paths must be absolute.
 func IDMapMount(usernsPath, mountPath string, unmountFirst bool) error {
@@ -130,9 +72,7 @@ func IDMapMount(usernsPath, mountPath string, unmountFirst bool) error {
 	}
 
 	// clone the given mount
-	fdTree, err := openTree(-1, mountPath,
-		uint(C.OPEN_TREE_CLONE|C.OPEN_TREE_CLOEXEC|unix.AT_EMPTY_PATH|unix.AT_RECURSIVE))
-
+	fdTree, err := unix.OpenTree(-1, mountPath, unix.OPEN_TREE_CLONE|unix.OPEN_TREE_CLOEXEC|unix.AT_EMPTY_PATH|unix.AT_RECURSIVE)
 	if err != nil {
 		return fmt.Errorf("Failed to open mount at %s: %s", mountPath, err)
 	}
@@ -159,7 +99,7 @@ func IDMapMount(usernsPath, mountPath string, unmountFirst bool) error {
 	}
 
 	// Attach the clone to the to mount point
-	err = moveMount(fdTree, "", -1, mountPath, C.MOVE_MOUNT_F_EMPTY_PATH)
+	err = unix.MoveMount(fdTree, "", -1, mountPath, unix.MOVE_MOUNT_F_EMPTY_PATH)
 	if err != nil {
 		return fmt.Errorf("Failed to move mount: %s", err)
 	}
