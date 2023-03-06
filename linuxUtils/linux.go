@@ -227,7 +227,7 @@ func GetLinuxHeaderPath(distro string) (string, error) {
 		return "", err
 	}
 
-	if distro == "redhat" || distro == "centos" || distro == "rocky" || distro == "almalinux" || distro == "fedora" {
+	if distro == "redhat" || distro == "centos" || distro == "rocky" || distro == "almalinux" || distro == "fedora" || distro == "amzn" {
 		path = filepath.Join("/usr/src/kernels", kernelRel)
 	} else if distro == "arch" || distro == "flatcar" {
 		path = filepath.Join("/lib/modules", kernelRel, "build")
