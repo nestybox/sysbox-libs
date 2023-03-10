@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/nestybox/sysbox-libs/linuxUtils"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
@@ -177,9 +178,8 @@ func runIDMapMountCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 
 	// Create a userns process that simply pauses until killed
 	execFunc := func() {
-		for {
-			c := make(chan struct{})
-			<-c
+		for i := 0; i < 3600; i++ {
+			time.Sleep(1 * time.Second)
 		}
 	}
 
