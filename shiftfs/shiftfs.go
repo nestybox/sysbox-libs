@@ -17,17 +17,16 @@
 package shiftfs
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"syscall"
 
 	"github.com/nestybox/sysbox-libs/linuxUtils"
 	"github.com/nestybox/sysbox-libs/mount"
 	"github.com/nestybox/sysbox-libs/utils"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
 
@@ -82,11 +81,13 @@ func Mounted(path string, mounts []*mount.Info) (bool, error) {
 
 // ShiftfsSupported checks if shiftfs is supported on the host.
 func ShiftfsSupported(dir string) (bool, error) {
+	logrus.Debugf("Running shiftfs check on host.")
 	return runShiftfsCheckOnHost(dir, false)
 }
 
 // ShiftfsSupported checks if shiftfs-on-overlayfs is supported on the host.
 func ShiftfsSupportedOnOverlayfs(dir string) (bool, error) {
+	logrus.Debugf("Running shiftfs-on-overlayfs check on host.")
 	return runShiftfsCheckOnHost(dir, true)
 }
 
@@ -95,7 +96,7 @@ func ShiftfsSupportedOnOverlayfs(dir string) (bool, error) {
 // indicates if the test should check shiftfs-on-overlayfs.
 func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 
-	shiftfsModPresent, err := probeShiftfsMod()
+	shiftfsModPresent, err := linuxUtils.KernelModSupported("shiftfs")
 	if err != nil {
 		return false, err
 	}
@@ -103,6 +104,8 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 	if !shiftfsModPresent {
 		return false, nil
 	}
+
+	logrus.Debugf("- shiftfs check: found shiftfs module.")
 
 	fsName, err := utils.GetFsName(dir)
 	if err != nil {
@@ -130,6 +133,8 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 		return false, err
 	}
 
+	logrus.Debugf("- shiftfs check: test dir = %s (%s)", testDir, fsName)
+
 	if checkOnOverlayfs {
 		lowerDir := filepath.Join(tmpDir, "lower")
 		upperDir := filepath.Join(tmpDir, "upper")
@@ -148,6 +153,8 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 			return false, err
 		}
 		defer unix.Unmount(testDir, unix.MNT_DETACH)
+
+		logrus.Debugf("- shiftfs check: mounted overlayfs on %s", testDir)
 	}
 
 	// Create the shiftfs mark on the test dir
@@ -156,9 +163,11 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 	}
 	defer Unmount(testDir)
 
+	logrus.Debugf("- shiftfs check: marked shiftfs on %s", testDir)
+
 	// Since shiftfs only makes sense within a user-ns, we will fork a child
 	// process into a new user-ns and have it mount shiftfs and verify it
-	// work. execFunc is the function the child will execute.
+	// works. execFunc is the function the child will execute.
 	execFunc := func() {
 		if err := unix.Setresuid(0, 0, 0); err != nil {
 			os.Exit(1)
@@ -167,7 +176,7 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 			os.Exit(1)
 		}
 		if err := Mount(testDir, testDir); err != nil {
-			os.Exit(1)
+			os.Exit(2)
 		}
 
 		testfile := filepath.Join(testDir, "testfile")
@@ -175,13 +184,13 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 
 		_, err := os.Create(testfile)
 		if err != nil {
-			os.Exit(1)
+			os.Exit(3)
 		}
 
 		// This operation will fail with EOVERFLOW if shiftfs is buggy in the kernel
 		if err := os.Rename(testfile, testfile2); err != nil {
 			os.Remove(testfile)
-			os.Exit(2)
+			os.Exit(4)
 		}
 
 		os.Remove(testfile2)
@@ -200,6 +209,8 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 		return false, err
 	}
 
+	logrus.Debugf("- shiftfs check: spawning child process (%d) into user-ns", pid)
+
 	// Wait for the child process to exit
 	var wstatus syscall.WaitStatus
 	var rusage syscall.Rusage
@@ -210,44 +221,17 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 	}
 
 	if !wstatus.Exited() {
+		logrus.Debugf("- shiftfs check: child process (%d) did not exit normally", pid)
 		return false, fmt.Errorf("child process did not exit normally")
 	}
 
 	exitStatus := wstatus.ExitStatus()
 
 	if exitStatus != 0 {
+		logrus.Debugf("- shiftfs check: child process failed (exit status = %d)", exitStatus)
 		return false, nil
 	}
 
+	logrus.Debugf("- shiftfs check: passed")
 	return true, nil
-}
-
-func probeShiftfsMod() (bool, error) {
-
-	file, err := os.Open("/proc/modules")
-	if err != nil {
-		return false, err
-	}
-	defer file.Close()
-
-	scanner := bufio.NewScanner(file)
-	found := false
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.Contains(line, "shiftfs") {
-			found = true
-			break
-		}
-	}
-
-	if err := scanner.Err(); err != nil {
-		return false, err
-	}
-
-	if found {
-		return true, nil
-	}
-
-	return false, nil
 }
