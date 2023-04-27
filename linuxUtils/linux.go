@@ -248,7 +248,9 @@ func KernelModSupported(mod string) (bool, error) {
 	exec.Command("modprobe", mod).Run()
 
 	// Check if the module is in the kernel
-	f, err := os.Open("/proc/modules")
+	filename := "/proc/modules"
+
+	f, err := os.Open(filename)
 	if err != nil {
 		return false, err
 	}
@@ -259,6 +261,9 @@ func KernelModSupported(mod string) (bool, error) {
 		if strings.Contains(s.Text(), mod) {
 			return true, nil
 		}
+	}
+	if err := s.Err(); err != nil {
+		return false, fmt.Errorf("failed to read %s: %s", filename, err)
 	}
 
 	return false, nil
