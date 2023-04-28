@@ -71,6 +71,11 @@ var unixFsNameTable = map[int64]string{
 	unix.XENFS_SUPER_MAGIC:     "xenfs",
 	unix.XFS_SUPER_MAGIC:       "xfs",
 	unix.ZONEFS_MAGIC:          "zonefs",
+
+	// Magic codes not yet defined in Unix package
+	0x65735546: "fuse",
+	0x6a656a62: "shiftfs",
+	0x6a656a63: "fakeowner",
 }
 
 func GetFsName(path string) (string, error) {
