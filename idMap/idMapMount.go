@@ -40,10 +40,9 @@ import (
 // TODO: remove this blacklist and instead run experiments on each fs
 
 var idMapMountFsBlackList = []int64{
-	unix.TMPFS_MAGIC,
-	unix.OVERLAYFS_SUPER_MAGIC,
-	0x65735546, // unix.FUSE_SUPER_MAGIC
-	0x6a656a63, // FAKEOWNER (Docker Desktop's Linux VM only)
+	unix.OVERLAYFS_SUPER_MAGIC, // can't id-map on top of an overlayfs mount
+	0x65735546,                 // unix.FUSE_SUPER_MAGIC
+	0x6a656a63,                 // FAKEOWNER (Docker Desktop's Linux VM only)
 }
 
 var idMapMountDevBlackList = []string{"/dev/null"}
@@ -244,6 +243,19 @@ func IDMapMountSupportedOnPath(path string) (bool, error) {
 
 	for _, name := range idMapMountFsBlackList {
 		if fs.Type == name {
+			return false, nil
+		}
+	}
+
+	// ID-mapped mounts on tmpfs supported since kernel 6.3
+	// Ref: https://lore.kernel.org/lkml/20230217080552.1628786-1-brauner@kernel.org/
+
+	if fs.Type == unix.TMPFS_MAGIC {
+		cmp, err := linuxUtils.KernelCurrentVersionCmp(6, 3)
+		if err != nil {
+			return false, fmt.Errorf("failed to compare kernel version: %v", err)
+		}
+		if cmp < 0 {
 			return false, nil
 		}
 	}
