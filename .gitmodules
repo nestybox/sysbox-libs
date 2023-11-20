@@ -1,6 +1,0 @@
-[submodule "libseccomp"]
-	path = libseccomp
-	url = ../libseccomp.git
-[submodule "libseccomp-golang"]
-	path = libseccomp-golang
-	url = ../libseccomp-golang.git
