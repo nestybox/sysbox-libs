@@ -117,3 +117,13 @@ func GetUpperLayer(mntOpts *MountOpts) string {
 	}
 	return ""
 }
+
+func GetWorkDir(mntOpts *MountOpts) string {
+	opts := strings.Split(mntOpts.Opts, ",")
+	for _, opt := range opts {
+		if strings.HasPrefix(opt, "workdir=") {
+			return strings.TrimPrefix(opt, "workdir=")
+		}
+	}
+	return ""
+}
