@@ -156,3 +156,22 @@ func MountSliceContains(s []specs.Mount, x specs.Mount, match func(a, b specs.Mo
 	}
 	return false
 }
+
+// DeviceSliceRemove removes from slice 's' any elements which occur on slice 'db'; the
+// given function is used to compare elements.
+func DeviceSliceRemove(s, db []specs.LinuxDevice, cmp func(d1, d2 specs.LinuxDevice) bool) []specs.LinuxDevice {
+	var r []specs.LinuxDevice
+	for i := 0; i < len(s); i++ {
+		found := false
+		for _, e := range db {
+			if cmp(s[i], e) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			r = append(r, s[i])
+		}
+	}
+	return r
+}
