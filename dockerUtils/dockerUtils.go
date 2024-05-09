@@ -14,8 +14,9 @@ import (
 
 	"github.com/nestybox/sysbox-libs/utils"
 
-	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/volume"
 	"github.com/docker/docker/client"
 )
 
@@ -71,13 +72,14 @@ func DockerConnect(timeout time.Duration) (*Docker, error) {
 		return nil, newDockerErr(DockerConnErr, fmt.Sprintf("failed to connect to Docker API: %v", err))
 	}
 
+	// Get the docker data root dir (usually /var/lib/docker)
 	info, err := cli.Info(context.Background())
 	if err != nil {
 		err2 := cli.Close()
 		if err2 != nil {
 			return nil, newDockerErr(DockerInfoErr, fmt.Sprintf("failed to retrieve Docker info (%v) and disconnect from Docker API (%v)", err, err2))
 		}
-		return nil, newDockerErr(DockerInfoErr, fmt.Sprintf("failed to retrieve Docker info", err))
+		return nil, newDockerErr(DockerInfoErr, fmt.Sprintf("failed to retrieve Docker info: %v", err))
 	}
 
 	return &Docker{
@@ -106,7 +108,7 @@ func (d *Docker) ContainerGetImageID(containerID string) (string, error) {
 	filter := filters.NewArgs()
 	filter.Add("id", containerID)
 
-	containers, err := d.cli.ContainerList(context.Background(), types.ContainerListOptions{
+	containers, err := d.cli.ContainerList(context.Background(), container.ListOptions{
 		All:     true, // required since container may not yet be running
 		Filters: filter,
 	})
@@ -142,6 +144,31 @@ func (d *Docker) ContainerGetInfo(containerID string) (*ContainerInfo, error) {
 		Rootfs:     rootfs,
 		AutoRemove: info.HostConfig.AutoRemove,
 	}, nil
+}
+
+// ListVolumesAt lists Docker volumes with the given host mount point (which implies
+// volumes using the "local" driver only).
+func (d *Docker) ListVolumesAt(mountPoint string) ([]volume.Volume, error) {
+
+	filterArgs := filters.NewArgs()
+	filterArgs.Add("driver", "local")
+
+	// List volumes using the filter
+	volumeList, err := d.cli.VolumeList(context.Background(), volume.ListOptions{Filters: filterArgs})
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter volumes by mount point
+	var filteredVolumes []volume.Volume
+	for _, vol := range volumeList.Volumes {
+		if vol.Mountpoint == mountPoint {
+			filteredVolumes = append(filteredVolumes, *vol)
+			break
+		}
+	}
+
+	return filteredVolumes, nil
 }
 
 // ContainerIsDocker returns true if the given container ID corresponds to a
