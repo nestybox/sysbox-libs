@@ -6,16 +6,22 @@ package dockerUtils
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/docker/docker/api/types/volume"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetContainer(t *testing.T) {
 
 	testMode = true
+	defer func() { testMode = false }()
 
 	timeout := time.Duration(3 * time.Second)
 
@@ -67,8 +73,6 @@ func TestGetContainer(t *testing.T) {
 
 func TestGetContainerAutoRemove(t *testing.T) {
 
-	testMode = true
-
 	timeout := time.Duration(3 * time.Second)
 
 	docker, err := DockerConnect(timeout)
@@ -94,6 +98,44 @@ func TestGetContainerAutoRemove(t *testing.T) {
 		t.Errorf("Failed to stop test container: %v", err)
 	}
 }
+
+func TestListVolumesAt(t *testing.T) {
+	timeout := time.Duration(3 * time.Second)
+
+	docker, err := DockerConnect(timeout)
+	if err != nil {
+		t.Fatalf("DockerConnect() failed: %v", err)
+	}
+	defer docker.Disconnect()
+
+	// Prepare by creating a volume to test against
+	volName := "testvolume"
+	ctx := context.Background()
+	_, err = docker.cli.VolumeCreate(ctx, volume.CreateOptions{Name: volName, Driver: "local"})
+	assert.NoError(t, err, "should be able to create a volume")
+
+	// Clean up after test
+	defer func() {
+		err := docker.cli.VolumeRemove(ctx, volName, true)
+		assert.NoError(t, err, "should be able to remove the volume")
+	}()
+
+	// Test the function
+	mountPoint := filepath.Join("/var/lib/docker/volumes/", volName, "_data")
+	volumes, err := docker.ListVolumesAt(mountPoint)
+	assert.NoError(t, err, "should not have an error listing volumes")
+	assert.True(t, len(volumes) > 0, "should find at least one volume")
+	found := false
+	for _, vol := range volumes {
+		if vol.Name == volName && vol.Mountpoint == mountPoint {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "should find the test volume in the filtered list")
+}
+
+// test helpers
 
 func testStartContainer(autoRemove bool) (string, error) {
 	var cmd *exec.Cmd
