@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,9 +24,7 @@ func TestGetContainer(t *testing.T) {
 	testMode = true
 	defer func() { testMode = false }()
 
-	timeout := time.Duration(3 * time.Second)
-
-	docker, err := DockerConnect(timeout)
+	docker, err := DockerConnect()
 	if err != nil {
 		t.Fatalf("DockerConnect() failed: %v", err)
 	}
@@ -73,9 +72,7 @@ func TestGetContainer(t *testing.T) {
 
 func TestGetContainerAutoRemove(t *testing.T) {
 
-	timeout := time.Duration(3 * time.Second)
-
-	docker, err := DockerConnect(timeout)
+	docker, err := DockerConnect()
 	if err != nil {
 		t.Fatalf("DockerConnect() failed: %v", err)
 	}
@@ -100,9 +97,8 @@ func TestGetContainerAutoRemove(t *testing.T) {
 }
 
 func TestListVolumesAt(t *testing.T) {
-	timeout := time.Duration(3 * time.Second)
 
-	docker, err := DockerConnect(timeout)
+	docker, err := DockerConnect()
 	if err != nil {
 		t.Fatalf("DockerConnect() failed: %v", err)
 	}
@@ -133,6 +129,33 @@ func TestListVolumesAt(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "should find the test volume in the filtered list")
+}
+
+func TestDockerConnectDelay(t *testing.T) {
+	var wg sync.WaitGroup
+
+	numWorkers := 1000
+	maxDelay := 500 * time.Millisecond
+	delayCh := make(chan time.Duration, numWorkers)
+
+	for i := 0; i < numWorkers; i++ {
+		wg.Add(1)
+		go dockerConnectWorker(&wg, delayCh)
+	}
+
+	wg.Wait()
+
+	sum := 0 * time.Second
+	for i := 0; i < numWorkers; i++ {
+		sum += <-delayCh
+	}
+	avg := sum / time.Duration(numWorkers)
+
+	if avg > time.Duration(maxDelay) {
+		t.Fatalf("DockerConnect() delay failed: want <= %v, got %v", maxDelay, avg)
+	}
+
+	t.Logf("DockerConnect() delay for %d concurrent clients = %v (average)\n", numWorkers, avg)
 }
 
 // test helpers
@@ -177,4 +200,17 @@ func testStopContainer(id string, remove bool) error {
 	}
 
 	return nil
+}
+
+func dockerConnectWorker(wg *sync.WaitGroup, delayCh chan time.Duration) {
+	start := time.Now()
+	_, err := DockerConnect()
+	delay := time.Since(start)
+
+	if err != nil {
+		fmt.Printf("error connecting to docker (delay = %v): %v\n", delay, err)
+	}
+
+	delayCh <- delay
+	wg.Done()
 }
