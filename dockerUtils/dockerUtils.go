@@ -60,7 +60,14 @@ type Docker struct {
 }
 
 // DockerConnect establishes a session with the Docker daemon.
-func DockerConnect(timeout time.Duration) (*Docker, error) {
+func DockerConnect() (*Docker, error) {
+
+	// Profiling shows Docker takes on average ~10ms to respond to a single
+	// client; with up to 1000 concurrent clients, it takes ~400ms to respond on
+	// average (see the TestDockerConnectDelay() test in dockerUtils_test.go).
+	// Thus we set the timeout to 1 sec; if it doesn't respond in this time, it
+	// likely means Docker is not present.
+	timeout := time.Duration(1 * time.Second)
 
 	cli, err := client.NewClientWithOpts(
 		client.FromEnv,
@@ -177,9 +184,7 @@ func (d *Docker) ListVolumesAt(mountPoint string) ([]volume.Volume, error) {
 // rootfs.
 func ContainerIsDocker(id, rootfs string) (bool, error) {
 
-	timeout := time.Duration(500 * time.Millisecond)
-
-	docker, err := DockerConnect(timeout)
+	docker, err := DockerConnect()
 	if err == nil {
 		defer docker.Disconnect()
 		_, err := docker.ContainerGetImageID(id)
