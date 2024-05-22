@@ -1,3 +1,5 @@
-module ithub.com/nestybox/sysbox-libs/mount
+module github.com/nestybox/sysbox-libs/mount
 
-go 1.18
+go 1.21
+
+require golang.org/x/sys v0.20.0
