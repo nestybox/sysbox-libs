@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 
 	"github.com/nestybox/sysbox-libs/linuxUtils"
@@ -95,6 +96,7 @@ func ShiftfsSupportedOnOverlayfs(dir string) (bool, error) {
 // supported. dir is the path where the test will run, and checkOnOverlayfs
 // indicates if the test should check shiftfs-on-overlayfs.
 func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
+	usernsUid := 165536
 
 	shiftfsModPresent, err := linuxUtils.KernelModSupported("shiftfs")
 	if err != nil {
@@ -130,6 +132,10 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 
 	testDir := filepath.Join(tmpDir, "test")
 	if err := os.Mkdir(testDir, 0755); err != nil {
+		return false, err
+	}
+
+	if err := os.Chown(testDir, usernsUid, usernsUid); err != nil {
 		return false, err
 	}
 
@@ -169,38 +175,59 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 	// process into a new user-ns and have it mount shiftfs and verify it
 	// works. execFunc is the function the child will execute.
 	execFunc := func() {
+		logrus.Debugf("- shiftfs check: execFunc: running")
+
+		logrus.Debugf("- shiftfs check: execFunc: lock OS thread")
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		// Make ourselves root within the user ns
+		logrus.Debugf("- shiftfs check: execFunc: setresuid")
 		if err := unix.Setresuid(0, 0, 0); err != nil {
+			logrus.Debugf("- shiftfs check: execFunc: failed: %v", err)
 			os.Exit(1)
 		}
+		logrus.Debugf("- shiftfs check: execFunc: setresgid")
 		if err := unix.Setresgid(0, 0, 0); err != nil {
+			logrus.Debugf("- shiftfs check: execFunc: failed: %v", err)
 			os.Exit(1)
 		}
+
+		logrus.Debugf("- shiftfs check: execFunc: mounting shiftfs on %s", testDir)
 		if err := Mount(testDir, testDir); err != nil {
+			logrus.Debugf("- shiftfs check: execFunc: failed: %v", err)
 			os.Exit(2)
 		}
 
 		testfile := filepath.Join(testDir, "testfile")
 		testfile2 := filepath.Join(testDir, "testfile2")
 
+		logrus.Debugf("- shiftfs check: execFunc: creating file %s", testfile)
 		_, err := os.Create(testfile)
 		if err != nil {
+			logrus.Debugf("- shiftfs check: execFunc: failed: %v", err)
 			os.Exit(3)
 		}
 
 		// This operation will fail with EOVERFLOW if shiftfs is buggy in the kernel
+		logrus.Debugf("- shiftfs check: execFunc: renaming file %s to %s", testfile, testfile2)
 		if err := os.Rename(testfile, testfile2); err != nil {
+			logrus.Debugf("- shiftfs check: execFunc: failed: %v", err)
 			os.Remove(testfile)
 			os.Exit(4)
 		}
 
+		logrus.Debugf("- shiftfs check: execFunc: removing file %s", testfile2)
 		os.Remove(testfile2)
+
+		logrus.Debugf("- shiftfs check: execFunc: success")
 		os.Exit(0)
 	}
 
 	// Fork the child process into a new user-ns (and mount-ns too)
 	idmap := &specs.LinuxIDMapping{
 		ContainerID: 0,
-		HostID:      165536,
+		HostID:      uint32(usernsUid),
 		Size:        65536,
 	}
 
