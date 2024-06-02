@@ -27,6 +27,7 @@ import (
 	"github.com/nestybox/sysbox-libs/mount"
 	"github.com/nestybox/sysbox-libs/utils"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+	setxid "gopkg.in/hlandau/service.v1/daemon/setuid"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
@@ -183,12 +184,12 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 
 		// Make ourselves root within the user ns
 		logrus.Debugf("- shiftfs check: execFunc: setresuid")
-		if err := unix.Setresuid(0, 0, 0); err != nil {
+		if err := setxid.Setresuid(0, 0, 0); err != nil {
 			logrus.Debugf("- shiftfs check: execFunc: failed: %v", err)
 			os.Exit(1)
 		}
 		logrus.Debugf("- shiftfs check: execFunc: setresgid")
-		if err := unix.Setresgid(0, 0, 0); err != nil {
+		if err := setxid.Setresgid(0, 0, 0); err != nil {
 			logrus.Debugf("- shiftfs check: execFunc: failed: %v", err)
 			os.Exit(1)
 		}
