@@ -9,6 +9,7 @@ require (
 	github.com/opencontainers/runtime-spec v1.0.2
 	github.com/sirupsen/logrus v1.9.0
 	golang.org/x/sys v0.20.0
+	gopkg.in/hlandau/service.v1 v1.0.7
 )
 
 require (
