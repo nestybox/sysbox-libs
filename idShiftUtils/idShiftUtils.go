@@ -57,7 +57,23 @@ type IDMapping struct {
 	Size        uint32
 }
 
-// Shifts the ACL type user and group IDs by the given offset
+// checkACLSupport attempts to set an extended ACL attribute on a file to check ACL support.
+func checkACLSupport(path string) bool {
+    file, err := os.Open(path)
+    if err != nil {
+        return false
+    }
+    defer file.Close()
+
+    // Try setting an extended attribute specific to ACLs
+    err = unix.Fsetxattr(int(file.Fd()), "system.posix_acl_access", []byte{}, 0)
+
+    // ENOTSUP means ACL is not supported; any other error indicates something
+    // else went wrong, so we assume ACLs are supported
+    return err != unix.ENOTSUP
+}
+
+// shiftAclType shifts the ACL type user and group IDs by the given offset
 func shiftAclType(aclT aclType, path string, uidOffset, gidOffset int32) error {
 	var facl aclLib.ACL
 	var err error
@@ -147,8 +163,9 @@ func shiftAclIds(path string, isDir bool, uidOffset, gidOffset int32) error {
 // below it by the given offset, using chown.
 func ShiftIdsWithChown(baseDir string, uidOffset, gidOffset int32) error {
 
-	hardLinks := []uint64{}
+	aclSupported := checkACLSupport(baseDir)
 
+	hardLinks := []uint64{}
 	err := godirwalk.Walk(baseDir, &godirwalk.Options{
 		Callback: func(path string, de *godirwalk.Dirent) error {
 
@@ -200,7 +217,7 @@ func ShiftIdsWithChown(baseDir string, uidOffset, gidOffset int32) error {
 
 			// Chowning the file is not sufficient; we also need to shift user and group IDs in
 			// the Linux access control list (ACL) for the file
-			if fMode&os.ModeSymlink == 0 {
+			if fMode&os.ModeSymlink == 0 && aclSupported {
 				if err := shiftAclIds(path, fi.IsDir(), uidOffset, gidOffset); err != nil {
 					return fmt.Errorf("failed to shift ACL for %s: %s", path, err)
 				}

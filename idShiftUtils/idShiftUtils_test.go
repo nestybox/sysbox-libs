@@ -1,5 +1,5 @@
 //
-// Copyright 2019-2021 Nestybox, Inc.
+// Copyright 2019-2024 Nestybox, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,16 +19,41 @@
 package idShiftUtils
 
 import (
-	"io/ioutil"
 	"os"
+	"path/filepath"
 	"testing"
 
 	aclLib "github.com/joshlf/go-acl"
 )
 
+func TestCheckACLSupport(t *testing.T) {
+
+	// create a tmp dir on ext4, where ACL is known to be supported
+	tmpdir, err := os.MkdirTemp("/mnt/scratch", "no_acl_test")
+	if err != nil {
+		t.Fatalf("Failed to create tmp dir: %v", err)
+	}
+	defer func() {
+		os.RemoveAll(tmpdir)
+	}()
+
+	// Create a test file in the mounted filesystem
+	testFile := filepath.Join(tmpdir, "testfile")
+	if _, err := os.Create(testFile); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+	defer os.Remove(testFile)
+
+	// Run the ACL check on the test file
+	supportsACL := checkACLSupport(testFile)
+	if !supportsACL {
+		t.Error("Expected ACLs to be supported, but checkACLSupport() returned false.")
+	}
+}
+
 func TestShiftAclIds(t *testing.T) {
 
-	testDir, err := ioutil.TempDir("", "shiftAclTest")
+	testDir, err := os.MkdirTemp("", "shiftAclTest")
 	if err != nil {
 		t.Fatal(err)
 	}
