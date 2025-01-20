@@ -371,3 +371,15 @@ func CreateUsernsProcess(idMap *specs.LinuxIDMapping, execFunc func(), cwd strin
 
 	return int(pid), childKillFunc, nil
 }
+
+func BinfmtMiscNamespacingSupported() (bool, error) {
+
+	// Kernel support for binfmt_misc namespacing appeared in kernel 6.7
+	// via commit "21ca59b365c0 binfmt_misc: enable sandboxed mounts".
+	cmp, err := KernelCurrentVersionCmp(6, 7)
+	if err != nil {
+		return false, err
+	}
+
+	return cmp >= 0, nil
+}
