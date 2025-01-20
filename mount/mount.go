@@ -2,7 +2,45 @@ package mount
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"syscall"
 )
+
+// IsMountPoint quickly checks if the given path is a mountpoint. It's fast
+// because it avoids the expensive reading and parsing of /proc/self/mountinfo
+// for the current process and instead relies on comparing the device IDs for
+// the given path versus that of it's parent mount path. This works well, except
+// for bind-mounts since the device ID does not differ in that case (use FindMount()
+// instead).
+func IsMountPoint(path string) (bool, error) {
+
+	if path == "/" {
+		return true, nil
+	}
+
+	// Get file info for the path
+	fileInfo, err := os.Stat(path)
+	if err != nil {
+		return false, fmt.Errorf("failed to stat path: %w", err)
+	}
+
+	// Get file info for the parent directory
+	parentPath := filepath.Join(path, "..")
+	parentInfo, err := os.Stat(parentPath)
+	if err != nil {
+		return false, fmt.Errorf("failed to stat parent path: %w", err)
+	}
+
+	// Compare device IDs using Sys() data
+	fileStat, ok1 := fileInfo.Sys().(*syscall.Stat_t)
+	parentStat, ok2 := parentInfo.Sys().(*syscall.Stat_t)
+	if !ok1 || !ok2 {
+		return false, fmt.Errorf("failed to retrieve Stat_t from file info")
+	}
+
+	return fileStat.Dev != parentStat.Dev, nil
+}
 
 // GetMounts retrieves a list of mounts for the current running process.
 func GetMounts() ([]*Info, error) {
