@@ -25,14 +25,17 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	specs "github.com/opencontainers/runtime-spec/specs-go"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/afero"
 	"golang.org/x/sys/unix"
+	setxid "gopkg.in/hlandau/service.v1/daemon/setuid"
 )
 
 // Afero FS for unit-testing purposes.
@@ -276,7 +279,7 @@ func KernelModSupported(mod string) (bool, error) {
 // function.
 //
 // NOTE: adapted from github.com/containers/storage/drivers/overlay
-func CreateUsernsProcess(idMap *specs.LinuxIDMapping, execFunc func(), cwd string, newMountNs bool) (int, func(), error) {
+func CreateUsernsProcess(idMap *specs.LinuxIDMapping, execFunc func(), cwd string, newMountNs bool, newIpcNs bool) (int, func(), error) {
 
 	currCwd, err := os.Getwd()
 	if err != nil {
@@ -291,6 +294,9 @@ func CreateUsernsProcess(idMap *specs.LinuxIDMapping, execFunc func(), cwd strin
 	flags := unix.CLONE_NEWUSER | uintptr(unix.SIGCHLD)
 	if newMountNs {
 		flags = flags | unix.CLONE_NEWNS
+	}
+	if newIpcNs {
+		flags = flags | unix.CLONE_NEWIPC
 	}
 
 	pid, _, err2 := syscall.Syscall6(uintptr(unix.SYS_CLONE), flags, 0, 0, 0, 0, 0)
@@ -382,4 +388,100 @@ func BinfmtMiscNamespacingSupported() (bool, error) {
 	}
 
 	return cmp >= 0, nil
+}
+
+// ShmSysctlUserNamespaced checks if /proc/sys/kernel/shm* sysctls can be
+// written to from within a user-ns empirically (by running an experiment).
+// Support for such namespacing was added in upstream kernel 6.9 (commit
+// 50ec499b9a43) but other distros (e.g., Ubuntu) may have backported to earlier
+// versions so just checking for the kernel version is not sufficient.
+func ShmSysctlUserNamespaced() (bool, error) {
+	logrus.Debugf("Running /proc/sys/kernel/shm* sysctl namespacing check on host.")
+
+	currCwd, err := os.Getwd()
+	if err != nil {
+		return false, err
+	}
+
+	// This is the function that will check if /proc/sys/kernel/shm* sysctls are
+	// namespaced and can be written to.
+	execFunc := func() {
+		logrus.Debugf("- shm ns check: execFunc: lock OS thread")
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+
+		// Make ourselves root within the user ns
+		logrus.Debugf("- shm ns check: execFunc: setresuid")
+		if err := setxid.Setresuid(0, 0, 0); err != nil {
+			logrus.Debugf("- shiftfs check: execFunc: failed: %v", err)
+			os.Exit(1)
+		}
+		logrus.Debugf("- shm ns check: execFunc: setresgid")
+		if err := setxid.Setresgid(0, 0, 0); err != nil {
+			logrus.Debugf("- shm ns check: execFunc: failed: %v", err)
+			os.Exit(1)
+		}
+
+		// Try opening the /proc/sys/kernel/shm* files for read-write access;
+		// failure to do so means the sysctl is not accesible from a user-ns.
+		sysctls := []string{
+			"/proc/sys/kernel/shmmni",
+			"/proc/sys/kernel/shmmax",
+			"/proc/sys/kernel/shmall",
+		}
+		for _, sysctl := range sysctls {
+			f, err := os.OpenFile(sysctl, os.O_RDWR, 0o644)
+			if err != nil {
+				if errors.Is(err, syscall.EPERM) {
+					logrus.Debugf("- shm ns check: execFunc: sysctl %s is not writeable from user-ns (EPERM)", sysctl)
+				} else {
+					logrus.Debugf("- shm ns check: execFunc: failed to open %s for writes: %v", sysctl, err)
+				}
+				os.Exit(2)
+			}
+			f.Close()
+		}
+
+		logrus.Debugf("- shm ns check: execFunc: success")
+		os.Exit(0)
+	}
+
+	// Fork the child process into a new user-ns and ipc namespaces and run the
+	// test func.
+	idmap := &specs.LinuxIDMapping{
+		ContainerID: 0,
+		HostID:      uint32(165536),
+		Size:        65536,
+	}
+
+	pid, _, err := CreateUsernsProcess(idmap, execFunc, currCwd, true, true)
+	if err != nil {
+		return false, err
+	}
+
+	logrus.Debugf("- shm ns check: spawning child process (%d) into user-ns and ipc ns", pid)
+
+	// Wait for the child process to exit
+	var wstatus syscall.WaitStatus
+	var rusage syscall.Rusage
+
+	_, err = syscall.Wait4(pid, &wstatus, 0, &rusage)
+	if err != nil {
+		return false, err
+	}
+
+	if !wstatus.Exited() {
+		logrus.Debugf("- shm ns check: child process (%d) did not exit normally", pid)
+		return false, fmt.Errorf("child process did not exit normally")
+	}
+
+	exitStatus := wstatus.ExitStatus()
+
+	if exitStatus != 0 {
+		logrus.Debugf("- shm ns check: child process failed (exit status = %d)", exitStatus)
+		return false, nil
+	}
+
+	logrus.Debugf("- shm ns check: passed")
+	return true, nil
 }

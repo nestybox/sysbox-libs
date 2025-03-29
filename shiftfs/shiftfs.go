@@ -27,9 +27,9 @@ import (
 	"github.com/nestybox/sysbox-libs/mount"
 	"github.com/nestybox/sysbox-libs/utils"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
-	setxid "gopkg.in/hlandau/service.v1/daemon/setuid"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
+	setxid "gopkg.in/hlandau/service.v1/daemon/setuid"
 )
 
 const SHIFTFS_MAGIC int64 = 0x6a656a62
@@ -232,7 +232,7 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 		Size:        65536,
 	}
 
-	pid, _, err := linuxUtils.CreateUsernsProcess(idmap, execFunc, testDir, true)
+	pid, _, err := linuxUtils.CreateUsernsProcess(idmap, execFunc, testDir, true, false)
 	if err != nil {
 		return false, err
 	}
