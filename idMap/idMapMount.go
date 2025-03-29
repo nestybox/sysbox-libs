@@ -187,7 +187,7 @@ func runIDMapMountCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 		Size:        1,
 	}
 
-	pid, childKill, err := linuxUtils.CreateUsernsProcess(idmap, execFunc, testDir, false)
+	pid, childKill, err := linuxUtils.CreateUsernsProcess(idmap, execFunc, testDir, false, false)
 	if err != nil {
 		return false, err
 	}
