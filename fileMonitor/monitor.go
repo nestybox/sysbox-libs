@@ -21,65 +21,69 @@ import (
 	"time"
 )
 
-type cmd int
-
-const (
-	stop cmd = iota
-)
-
 // Monitors files associated with the given FileMon instance
 func fileMon(fm *FileMon) {
-	for {
-		eventList := []Event{}
-		rmList := []Event{}
+	ticker := time.NewTicker(fm.cfg.PollInterval)
+	eventList := []Event{}
 
-		// handle incoming commands first
+	defer func() {
+		fm.mu.Lock()
+		fm.running = false
+		fm.mu.Unlock()
+		ticker.Stop()
+	}()
+
+	for {
 		select {
-		case cmd := <-fm.cmdCh:
-			if cmd == stop {
-				fm.eventCh <- eventList
+		case <-fm.stopCh:
+			fm.eventCh <- eventList
+			return
+		case <-ticker.C:
+			checkFiles(fm, eventList)
+			fm.mu.Lock()
+			fileTableEmpty := len(fm.fileTable) == 0
+			fm.mu.Unlock()
+			if fileTableEmpty {
+				// no files to monitor
 				return
 			}
-		default:
 		}
-
-		// perform monitoring action
-		fm.mu.Lock()
-		for filename, _ := range fm.eventTable {
-			exists, err := checkFileExists(filename)
-			if err != nil || !exists {
-				eventList = append(eventList, Event{
-					Filename: filename,
-					Err:      err,
-				})
-
-				// file removal implies event won't hit again; remove it.
-				rmList = append(rmList, Event{filename, nil})
-			}
-		}
-
-		// release the lock so that we don't hold it while sending the event list
-		// (in case the event channel is blocked); this way new events can
-		// continue to be added.
-		fm.mu.Unlock()
-
-		// send event list
-		if len(eventList) > 0 {
-			fm.eventCh <- eventList
-		}
-
-		// remove events that won't hit any more
-		fm.mu.Lock()
-		for _, e := range rmList {
-			if _, ok := fm.eventTable[e.Filename]; ok {
-				delete(fm.eventTable, e.Filename)
-			}
-		}
-		fm.mu.Unlock()
-
-		// wait for the poll period
-		time.Sleep(fm.cfg.PollInterval)
 	}
+}
+
+func checkFiles(fm *FileMon, eventList []Event) {
+	rmList := []Event{}
+
+	fm.mu.Lock()
+	for filename := range fm.fileTable {
+		exists, err := checkFileExists(filename)
+		if err != nil || !exists {
+			eventList = append(eventList, Event{
+				Filename: filename,
+				Err:      err,
+			})
+
+			// file removal implies event won't hit again; remove it.
+			rmList = append(rmList, Event{filename, nil})
+		}
+	}
+
+	// release the lock so that we don't hold it while sending the event list
+	// (in case the event channel is blocked); this way new events can
+	// continue to be added.
+	fm.mu.Unlock()
+
+	// send event list
+	if len(eventList) > 0 {
+		fm.eventCh <- eventList
+	}
+
+	// remove events that won't hit any more
+	fm.mu.Lock()
+	for _, e := range rmList {
+		delete(fm.fileTable, e.Filename)
+	}
+	fm.mu.Unlock()
 }
 
 // Checks if the given file exists
