@@ -18,12 +18,13 @@ package fileMonitor
 
 import (
 	"fmt"
-	"github.com/nestybox/sysbox-libs/utils"
-	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/nestybox/sysbox-libs/utils"
+	log "github.com/sirupsen/logrus"
 )
 
 func init() {

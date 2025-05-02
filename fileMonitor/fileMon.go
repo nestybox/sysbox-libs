@@ -42,11 +42,12 @@ type Event struct {
 }
 
 type FileMon struct {
-	mu         sync.Mutex
-	cfg        Cfg
-	eventTable map[string]bool
-	cmdCh      chan cmd
-	eventCh    chan []Event // receives events from monitor thread
+	mu        sync.Mutex
+	cfg       Cfg
+	fileTable map[string]bool // map of files to monitor
+	stopCh    chan struct{}   // signals the monitor thread to stop
+	eventCh   chan []Event    // receives events from monitor thread
+	running   bool            // indicates if the monitor thread is running
 }
 
 func New(cfg *Cfg) (*FileMon, error) {
@@ -55,28 +56,28 @@ func New(cfg *Cfg) (*FileMon, error) {
 	}
 
 	fm := &FileMon{
-		cfg:        *cfg,
-		eventTable: make(map[string]bool),
-		cmdCh:      make(chan cmd),
-		eventCh:    make(chan []Event, cfg.EventBufSize),
+		cfg:       *cfg,
+		fileTable: make(map[string]bool),
+		stopCh:    make(chan struct{}),
+		eventCh:   make(chan []Event, cfg.EventBufSize),
 	}
-
-	go fileMon(fm)
 
 	return fm, nil
 }
 
 func (fm *FileMon) Add(file string) {
 	fm.mu.Lock()
-	fm.eventTable[file] = true
+	fm.fileTable[file] = true
+	if !fm.running {
+		fm.running = true
+		go fileMon(fm)
+	}
 	fm.mu.Unlock()
 }
 
 func (fm *FileMon) Remove(file string) {
 	fm.mu.Lock()
-	if _, ok := fm.eventTable[file]; ok {
-		delete(fm.eventTable, file)
-	}
+	delete(fm.fileTable, file)
 	fm.mu.Unlock()
 }
 
@@ -85,7 +86,7 @@ func (fm *FileMon) Events() <-chan []Event {
 }
 
 func (fm *FileMon) Close() {
-	fm.cmdCh <- stop
+	close(fm.stopCh)
 }
 
 func validateCfg(cfg *Cfg) error {
