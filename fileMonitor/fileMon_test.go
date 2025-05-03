@@ -18,7 +18,6 @@ package fileMonitor
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -38,7 +37,7 @@ func TestOneRemovalPerInterval(t *testing.T) {
 	// create a bunch of temp files
 	tmpFiles := []string{}
 	for i := 0; i < numFiles; i++ {
-		file, err := ioutil.TempFile("", "fileMonTest")
+		file, err := os.CreateTemp("", "fileMonTest")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +95,7 @@ func TestMultiRemovalPerInterval(t *testing.T) {
 	// create a bunch of temp files
 	tmpFiles := []string{}
 	for i := 0; i < numFiles; i++ {
-		file, err := ioutil.TempFile("", "fileMonTest")
+		file, err := os.CreateTemp("", "fileMonTest")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -167,7 +166,7 @@ func TestSymlinkedFileRemoval(t *testing.T) {
 
 	// create a bunch of temp files with symlinks to them
 	for i := 0; i < numFiles; i++ {
-		file, err := ioutil.TempFile("", "fileMonTest")
+		file, err := os.CreateTemp("", "fileMonTest")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -237,7 +236,7 @@ func TestEventRemoval(t *testing.T) {
 	// create a bunch of temp files
 	tmpFiles := []string{}
 	for i := 0; i < numFiles; i++ {
-		file, err := ioutil.TempFile("", "fileMonTest")
+		file, err := os.CreateTemp("", "fileMonTest")
 		if err != nil {
 			t.Fatal(err)
 		}
