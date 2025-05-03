@@ -136,10 +136,6 @@ func runShiftfsCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 		return false, err
 	}
 
-	if err := os.Chown(testDir, usernsUid, usernsUid); err != nil {
-		return false, err
-	}
-
 	logrus.Debugf("- shiftfs check: test dir = %s (%s)", testDir, fsName)
 
 	if checkOnOverlayfs {
