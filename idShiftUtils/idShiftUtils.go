@@ -59,18 +59,18 @@ type IDMapping struct {
 
 // checkACLSupport attempts to set an extended ACL attribute on a file to check ACL support.
 func checkACLSupport(path string) bool {
-    file, err := os.Open(path)
-    if err != nil {
-        return false
-    }
-    defer file.Close()
+	file, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer file.Close()
 
-    // Try setting an extended attribute specific to ACLs
-    err = unix.Fsetxattr(int(file.Fd()), "system.posix_acl_access", []byte{}, 0)
+	// Try setting an extended attribute specific to ACLs
+	err = unix.Fsetxattr(int(file.Fd()), "system.posix_acl_access", []byte{}, 0)
 
-    // ENOTSUP means ACL is not supported; any other error indicates something
-    // else went wrong, so we assume ACLs are supported
-    return err != unix.ENOTSUP
+	// ENOTSUP means ACL is not supported; any other error indicates something
+	// else went wrong, so we assume ACLs are supported
+	return err != unix.ENOTSUP
 }
 
 // shiftAclType shifts the ACL type user and group IDs by the given offset
@@ -162,10 +162,15 @@ func shiftAclIds(path string, isDir bool, uidOffset, gidOffset int32) error {
 // "Shifts" ownership of user and group IDs on the given directory and files and directories
 // below it by the given offset, using chown.
 func ShiftIdsWithChown(baseDir string, uidOffset, gidOffset int32) error {
+	type fowner struct {
+		uid int32
+		gid int32
+	}
 
 	aclSupported := checkACLSupport(baseDir)
 
-	hardLinks := []uint64{}
+	hardLinks := make(map[uint64]fowner)
+
 	err := godirwalk.Walk(baseDir, &godirwalk.Options{
 		Callback: func(path string, de *godirwalk.Dirent) error {
 
@@ -184,19 +189,21 @@ func ShiftIdsWithChown(baseDir string, uidOffset, gidOffset int32) error {
 				return fmt.Errorf("failed to convert to syscall.Stat_t")
 			}
 
-			// If a file has multiple hardlinks, change its ownership once
-			if st.Nlink >= 2 {
-				for _, linkInode := range hardLinks {
-					if linkInode == st.Ino {
-						return nil
-					}
-				}
-
-				hardLinks = append(hardLinks, st.Ino)
-			}
-
 			targetUid := int32(st.Uid) + uidOffset
 			targetGid := int32(st.Gid) + gidOffset
+
+			// If a file has multiple hardlinks, change them all to the same uid:gid
+			if st.Nlink > 1 {
+				owner, found := hardLinks[st.Ino]
+				if found {
+					// we've seen this hardlink before, copy its ownership
+					targetUid = owner.uid
+					targetGid = owner.gid
+				} else {
+					// first time we see this hardlink, track its ownership
+					hardLinks[st.Ino] = fowner{uid: targetUid, gid: targetGid}
+				}
+			}
 
 			err = unix.Lchown(path, int(targetUid), int(targetGid))
 			if err != nil {
