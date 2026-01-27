@@ -117,3 +117,23 @@ func GetUpperLayer(mntOpts *MountOpts) string {
 	}
 	return ""
 }
+
+func GetWorkLayer(mntOpts *MountOpts) string {
+	opts := strings.Split(mntOpts.Opts, ",")
+	for _, opt := range opts {
+		if strings.HasPrefix(opt, "workdir=") {
+			return strings.TrimPrefix(opt, "workdir=")
+		}
+	}
+	return ""
+}
+
+func GetVolatile(mntOpts *MountOpts) bool {
+	opts := strings.Split(mntOpts.Opts, ",")
+	for _, opt := range opts {
+		if opt == "volatile" {
+			return true
+		}
+	}
+	return false
+}
