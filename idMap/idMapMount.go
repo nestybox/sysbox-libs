@@ -20,6 +20,7 @@
 package idMap
 
 import (
+	stderrors "errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -30,6 +31,7 @@ import (
 	"github.com/nestybox/sysbox-libs/linuxUtils"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/pkg/errors"
+	logrus "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 )
 
@@ -120,7 +122,32 @@ func IDMapMountSupported(dir string) (bool, error) {
 		return false, nil
 	}
 
-	return runIDMapMountCheckOnHost(dir, false)
+	return runIDMapMountCheckOnHost(dir, ovfsCheckNone)
+}
+
+// OverlayfsOnIDMapUpperSupported checks whether the kernel supports id-mapped
+// mounts on the overlayfs upperdir and workdir.
+//
+// dir must be a writable path on the same filesystem that will host real
+// container upper layers (e.g. the containerd/docker snapshotter root).
+//
+// Returns (true, nil) if a throwaway overlayfs mount with id-mapped
+// upperdir+workdir succeeds; (false, nil) for supported negative results
+// (kernel too old, EINVAL/EOPNOTSUPP from mount); (false, err) on
+// unexpected I/O errors.
+func OverlayfsOnIDMapUpperSupported(dir string) (bool, error) {
+
+	// Id-mapped overlayfs upperdir requires Linux kernel >= 5.19.
+	// (Same floor as the existing lower-layer idmap support.)
+	kernelOK, err := checkKernelVersion(5, 19)
+	if err != nil {
+		return false, err
+	}
+	if !kernelOK {
+		return false, nil
+	}
+
+	return runIDMapMountCheckOnHost(dir, ovfsCheckUpper)
 }
 
 // OverlayfsOnIDMapMountSupported checks if overlayfs over ID-mapped lower
@@ -137,13 +164,23 @@ func OverlayfsOnIDMapMountSupported(dir string) (bool, error) {
 		return false, nil
 	}
 
-	return runIDMapMountCheckOnHost(dir, true)
+	return runIDMapMountCheckOnHost(dir, ovfsCheckLower)
 }
 
+// ovfsCheckMode controls which overlayfs id-map scenario runIDMapMountCheckOnHost probes.
+type ovfsCheckMode int
+
+const (
+	ovfsCheckNone  ovfsCheckMode = iota // plain idmap bind-mount probe (no overlayfs)
+	ovfsCheckLower                      // overlayfs with id-mapped lowerdir
+	ovfsCheckUpper                      // overlayfs with id-mapped upperdir + workdir
+)
+
 // runIDMapMountCheckOnHost runs a quick test on the host to check if ID-mapping is
-// supported. dir is the path where the test will run. If checkOnOverlayfs
-// is true, the test checks if overlayfs supports ID-mapped lower layers.
-func runIDMapMountCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
+// supported. dir is the path where the test will run. mode controls what scenario
+// is probed: plain idmap, idmap on overlayfs lower layers, or idmap on overlayfs
+// upper+workdir layers.
+func runIDMapMountCheckOnHost(dir string, mode ovfsCheckMode) (bool, error) {
 	var (
 		lowerDir, upperDir, workDir, idMapDir string
 	)
@@ -161,7 +198,7 @@ func runIDMapMountCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 		return false, err
 	}
 
-	if checkOnOverlayfs {
+	if mode == ovfsCheckLower || mode == ovfsCheckUpper {
 		lowerDir = filepath.Join(tmpDir, "lower")
 		upperDir = filepath.Join(tmpDir, "upper")
 		workDir = filepath.Join(tmpDir, "work")
@@ -202,28 +239,82 @@ func runIDMapMountCheckOnHost(dir string, checkOnOverlayfs bool) (bool, error) {
 	// Create the ID mapped mount associated with the child process user-ns
 	usernsPath := fmt.Sprintf("/proc/%d/ns/user", pid)
 
-	if checkOnOverlayfs {
-		idMapDir = lowerDir
-	} else {
+	switch mode {
+	case ovfsCheckNone:
 		idMapDir = testDir
-	}
+		if err := IDMapMount(usernsPath, idMapDir, false); err != nil {
+			return false, errors.Wrap(err, "create mapped mount")
+		}
+		defer unix.Unmount(idMapDir, unix.MNT_DETACH)
+		return true, nil
 
-	if err := IDMapMount(usernsPath, idMapDir, false); err != nil {
-		return false, errors.Wrap(err, "create mapped mount")
-	}
-	defer unix.Unmount(idMapDir, unix.MNT_DETACH)
+	case ovfsCheckLower:
+		idMapDir = lowerDir
+		// IDMapMount failure here is propagated as a hard error rather than
+		// "not supported". By the time we reach this probe the caller has already
+		// confirmed IDMapMountSupported() returned true, so any failure on a
+		// plain bind-mount clone indicates a genuine I/O or permission problem
+		// rather than a kernel feature gap.
+		if err := IDMapMount(usernsPath, idMapDir, false); err != nil {
+			return false, errors.Wrap(err, "create mapped mount on lower")
+		}
+		defer unix.Unmount(idMapDir, unix.MNT_DETACH)
 
-	if checkOnOverlayfs {
 		opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDir, upperDir, workDir)
-		flags := uintptr(0)
-		if err := unix.Mount("overlay", testDir, "overlay", flags, opts); err != nil {
+		if err := unix.Mount("overlay", testDir, "overlay", uintptr(0), opts); err != nil {
+			return false, err
+		}
+		unix.Unmount(testDir, unix.MNT_DETACH)
+		return true, nil
+
+	case ovfsCheckUpper:
+		// Id-map both upperdir and workdir against the same userns.
+		// The kernel enforces that they share the same mnt_userns at
+		// overlayfs mount time; mismatches produce EINVAL.
+		//
+		// Only EINVAL/EOPNOTSUPP/ENOTSUP indicate the kernel does not support
+		// idmapped mounts on this filesystem type — those are treated as
+		// "not supported" (false, nil). All other errors (EPERM, EBUSY, EIO,
+		// …) are genuine failures and are propagated to the caller.
+		if err := IDMapMount(usernsPath, upperDir, false); err != nil {
+			if stderrors.Is(err, unix.EINVAL) ||
+				stderrors.Is(err, unix.EOPNOTSUPP) ||
+				stderrors.Is(err, unix.ENOTSUP) {
+				logrus.Debugf("ovfsCheckUpper: upperdir idmap not supported on this fs: %v", err)
+				return false, nil
+			}
+			return false, err
+		}
+		defer unix.Unmount(upperDir, unix.MNT_DETACH)
+
+		if err := IDMapMount(usernsPath, workDir, false); err != nil {
+			if stderrors.Is(err, unix.EINVAL) ||
+				stderrors.Is(err, unix.EOPNOTSUPP) ||
+				stderrors.Is(err, unix.ENOTSUP) {
+				logrus.Debugf("ovfsCheckUpper: workdir idmap not supported on this fs: %v", err)
+				return false, nil
+			}
+			return false, err
+		}
+		defer unix.Unmount(workDir, unix.MNT_DETACH)
+
+		opts := fmt.Sprintf("lowerdir=%s,upperdir=%s,workdir=%s", lowerDir, upperDir, workDir)
+		if err := unix.Mount("overlay", testDir, "overlay", uintptr(0), opts); err != nil {
+			// Kernel rejected overlayfs with id-mapped upper/workdir.
+			// Treat EINVAL, EOPNOTSUPP, ENOTSUP as "not supported";
+			// propagate genuine I/O errors.
+			if stderrors.Is(err, unix.EINVAL) ||
+				stderrors.Is(err, unix.EOPNOTSUPP) ||
+				stderrors.Is(err, unix.ENOTSUP) {
+				return false, nil
+			}
 			return false, err
 		}
 		unix.Unmount(testDir, unix.MNT_DETACH)
 		return true, nil
 	}
 
-	return true, nil
+	return false, fmt.Errorf("unknown ovfsCheckMode %d", mode)
 }
 
 // Checkf if the dir at the given path can be ID-mapped based on the underlying filesystem.

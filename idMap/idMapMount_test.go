@@ -79,3 +79,36 @@ func TestIDMapMountSupportedOnOverlayfs(t *testing.T) {
 		}
 	}
 }
+
+func TestOverlayfsOnIDMapUpperSupported(t *testing.T) {
+
+	kernelOK, err := checkKernelVersion(5, 19)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if kernelOK {
+		dir := "/var/lib/sysbox"
+
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		// This probe tests ovfsCheckUpper: it idmaps both the upperdir and
+		// workdir of a throwaway overlayfs mount, verifying the kernel accepts
+		// the combination. EINVAL/EOPNOTSUPP/ENOTSUP from either IDMapMount or
+		// the overlay mount itself causes supported=false (not an error).
+		supported, err := OverlayfsOnIDMapUpperSupported(dir)
+		if err != nil {
+			t.Fatalf("OverlayfsOnIDMapUpperSupported() failed with error: %s", err)
+		}
+
+		if supported {
+			t.Logf("Overlayfs id-mapped upperdir supported on this host.")
+		} else {
+			t.Logf("Overlayfs id-mapped upperdir NOT supported on this host (will use chown fallback).")
+		}
+	} else {
+		t.Logf("Kernel < 5.19; OverlayfsOnIDMapUpperSupported fast-path returns false.")
+	}
+}
