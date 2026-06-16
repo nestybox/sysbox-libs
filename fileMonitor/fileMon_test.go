@@ -19,15 +19,15 @@ package fileMonitor
 import (
 	"fmt"
 	"os"
+	"slices"
 	"testing"
 	"time"
 
-	"github.com/nestybox/sysbox-libs/utils"
 	log "github.com/sirupsen/logrus"
 )
 
 func init() {
-	//log.SetLevel(log.DebugLevel)
+	// log.SetLevel(log.DebugLevel)
 }
 
 func TestOneRemovalPerInterval(t *testing.T) {
@@ -146,7 +146,7 @@ func TestMultiRemovalPerInterval(t *testing.T) {
 	}
 
 	for _, e := range events {
-		if !utils.StringSliceContains(tmpFiles, e.Filename) {
+		if !slices.Contains(tmpFiles, e.Filename) {
 			t.Fatalf("event %+v does not match a removed file", e)
 		}
 		if e.Err != nil {
@@ -293,7 +293,7 @@ func TestEventRemoval(t *testing.T) {
 		if e.Filename == lastFile {
 			t.Fatalf("event %+v should not have been received", e)
 		}
-		if !utils.StringSliceContains(tmpFiles, e.Filename) {
+		if !slices.Contains(tmpFiles, e.Filename) {
 			t.Fatalf("event %+v does not match a removed file", e)
 		}
 		if e.Err != nil {
