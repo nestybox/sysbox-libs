@@ -17,30 +17,27 @@
 package utils
 
 import (
+	"slices"
+
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
 // StringSliceContains returns true if x is in a
+//
+// Deprecated: use [slices.Contains].
+//
+//go:fix: inline
 func StringSliceContains(a []string, x string) bool {
-	for _, n := range a {
-		if x == n {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(a, x)
 }
 
 // StringSliceEqual compares two slices and returns true if they match
+//
+// Deprecated: use [slices.Equal]
+//
+//go:fix inline
 func StringSliceEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i, v := range a {
-		if v != b[i] {
-			return false
-		}
-	}
-	return true
+	return slices.Equal(a, b)
 }
 
 // StringSliceRemove removes from slice 's' any elements which occur on slice 'db'.
@@ -109,7 +106,7 @@ func MountSliceEqual(a, b []specs.Mount) bool {
 		if m.Destination != b[i].Destination ||
 			m.Source != b[i].Source ||
 			m.Type != b[i].Type ||
-			!StringSliceEqual(m.Options, b[i].Options) {
+			!slices.Equal(m.Options, b[i].Options) {
 			return false
 		}
 	}
