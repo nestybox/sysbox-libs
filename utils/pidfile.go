@@ -18,7 +18,6 @@ package utils
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -52,7 +51,7 @@ func CreatePidFile(program string, pidFile string) error {
 	}
 
 	pidStr := fmt.Sprintf("%d\n", os.Getpid())
-	if err := ioutil.WriteFile(pidFile, []byte(pidStr), 0400); err != nil {
+	if err := os.WriteFile(pidFile, []byte(pidStr), 0400); err != nil {
 		return fmt.Errorf("failed to write %s pid to file %s: %s", program, pidFile, err)
 	}
 
@@ -65,7 +64,7 @@ func DestroyPidFile(pidFile string) error {
 
 func readPidFile(pidFile string) (int, error) {
 
-	bs, err := ioutil.ReadFile(pidFile)
+	bs, err := os.ReadFile(pidFile)
 	if err != nil {
 		return 0, err
 	}
