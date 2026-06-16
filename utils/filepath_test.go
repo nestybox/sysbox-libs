@@ -16,7 +16,10 @@
 
 package utils
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 func TestFilepathSort(t *testing.T) {
 
@@ -38,7 +41,7 @@ func TestFilepathSort(t *testing.T) {
 		"/w/x/y/z",
 	}
 
-	if !StringSliceEqual(paths, want) {
+	if !slices.Equal(paths, want) {
 		t.Errorf("FilepathSort() failed: want %v, got %v", want, paths)
 	}
 }
