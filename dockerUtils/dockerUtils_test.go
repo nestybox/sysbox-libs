@@ -138,7 +138,7 @@ func TestDockerConnectDelay(t *testing.T) {
 	maxDelay := 500 * time.Millisecond
 	delayCh := make(chan time.Duration, numWorkers)
 
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		wg.Add(1)
 		go dockerConnectWorker(&wg, delayCh)
 	}
@@ -146,7 +146,7 @@ func TestDockerConnectDelay(t *testing.T) {
 	wg.Wait()
 
 	sum := 0 * time.Second
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		sum += <-delayCh
 	}
 	avg := sum / time.Duration(numWorkers)

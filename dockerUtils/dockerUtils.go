@@ -207,7 +207,7 @@ func isDockerRootfs(rootfs string) (bool, error) {
 	maxFilesPerDir := 30 // the docker data root dir has typically 10->20 subdirs in it
 	path := rootfs
 
-	for i := 0; i < searchLevels; i++ {
+	for range searchLevels {
 		path = filepath.Dir(path)
 
 		dir, err := os.Open(path)
