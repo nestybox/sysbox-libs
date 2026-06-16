@@ -21,7 +21,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -362,7 +361,7 @@ func CreateUsernsProcess(idMap *specs.LinuxIDMapping, execFunc func(), cwd strin
 	// Write the user-ns mappings (the child is waiting for them)
 	writeMapping := func(fname string, idmap *specs.LinuxIDMapping) error {
 		mapping := fmt.Sprintf("%d %d %d\n", idmap.ContainerID, idmap.HostID, idmap.Size)
-		return ioutil.WriteFile(fmt.Sprintf("/proc/%d/%s", pid, fname), []byte(mapping), 0600)
+		return os.WriteFile(fmt.Sprintf("/proc/%d/%s", pid, fname), []byte(mapping), 0600)
 	}
 
 	if err := writeMapping("uid_map", idMap); err != nil {
