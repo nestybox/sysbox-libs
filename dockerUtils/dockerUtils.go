@@ -9,10 +9,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
-
-	"github.com/nestybox/sysbox-libs/utils"
 
 	"github.com/moby/moby/api/types/volume"
 	"github.com/moby/moby/client"
@@ -223,7 +222,7 @@ func isDockerRootfs(rootfs string) (bool, error) {
 
 		isDocker := true
 		for _, dockerDir := range dockerDirs {
-			if !utils.StringSliceContains(filenames, dockerDir) {
+			if !slices.Contains(filenames, dockerDir) {
 				isDocker = false
 			}
 		}
