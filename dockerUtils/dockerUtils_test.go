@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types/volume"
+	"github.com/moby/moby/client"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -107,12 +107,12 @@ func TestListVolumesAt(t *testing.T) {
 	// Prepare by creating a volume to test against
 	volName := "testvolume"
 	ctx := context.Background()
-	_, err = docker.cli.VolumeCreate(ctx, volume.CreateOptions{Name: volName, Driver: "local"})
+	_, err = docker.cli.VolumeCreate(ctx, client.VolumeCreateOptions{Name: volName, Driver: "local"})
 	assert.NoError(t, err, "should be able to create a volume")
 
 	// Clean up after test
 	defer func() {
-		err := docker.cli.VolumeRemove(ctx, volName, true)
+		_, err := docker.cli.VolumeRemove(ctx, volName, client.VolumeRemoveOptions{Force: true})
 		assert.NoError(t, err, "should be able to remove the volume")
 	}()
 
