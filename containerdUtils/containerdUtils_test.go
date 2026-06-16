@@ -1,7 +1,6 @@
 package containerdUtils
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 )
@@ -74,7 +73,7 @@ imports = ["/etc/containerd/runtime_*.toml", "./debug.toml"]
 
 			// Create a temporary config file if content is provided
 			if tt.configContent != "" {
-				tmpFile, err := ioutil.TempFile("", "config-*.toml")
+				tmpFile, err := os.CreateTemp("", "config-*.toml")
 				if err != nil {
 					t.Fatalf("Failed to create temp file: %v", err)
 				}
