@@ -17,7 +17,6 @@
 package utils
 
 import (
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -25,7 +24,7 @@ import (
 
 func TestSysboxPidFile(t *testing.T) {
 
-	testDir, err := ioutil.TempDir("", "sysbox-mgr-test")
+	testDir, err := os.MkdirTemp("", "sysbox-mgr-test")
 	if err != nil {
 		t.Errorf(err.Error())
 	}
