@@ -1,6 +1,6 @@
 package formatter
 
-import "github.com/docker/docker/pkg/stringid"
+import "github.com/moby/moby/client/pkg/stringid"
 
 type ContainerID struct {
 	ID string
