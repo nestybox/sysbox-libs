@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/moby/moby/client"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestGetContainer(t *testing.T) {
@@ -108,19 +107,27 @@ func TestListVolumesAt(t *testing.T) {
 	volName := "testvolume"
 	ctx := context.Background()
 	_, err = docker.cli.VolumeCreate(ctx, client.VolumeCreateOptions{Name: volName, Driver: "local"})
-	assert.NoError(t, err, "should be able to create a volume")
+	if err != nil {
+		t.Fatalf("should be able to create a volume: %v", err)
+	}
 
 	// Clean up after test
 	defer func() {
 		_, err := docker.cli.VolumeRemove(ctx, volName, client.VolumeRemoveOptions{Force: true})
-		assert.NoError(t, err, "should be able to remove the volume")
+		if err != nil {
+			t.Fatalf("should be able to remove the volume: %v", err)
+		}
 	}()
 
 	// Test the function
 	mountPoint := filepath.Join("/var/lib/docker/volumes/", volName, "_data")
 	volumes, err := docker.ListVolumesAt(mountPoint)
-	assert.NoError(t, err, "should not have an error listing volumes")
-	assert.True(t, len(volumes) > 0, "should find at least one volume")
+	if err != nil {
+		t.Fatalf("should not have an error listing volumes: %v", err)
+	}
+	if len(volumes) == 0 {
+		t.Fatalf("should have at least one volume")
+	}
 	found := false
 	for _, vol := range volumes {
 		if vol.Name == volName && vol.Mountpoint == mountPoint {
@@ -128,7 +135,9 @@ func TestListVolumesAt(t *testing.T) {
 			break
 		}
 	}
-	assert.True(t, found, "should find the test volume in the filtered list")
+	if !found {
+		t.Fatalf("should have found volume %s in %s", volName, mountPoint)
+	}
 }
 
 func TestDockerConnectDelay(t *testing.T) {
