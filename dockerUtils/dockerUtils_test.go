@@ -15,8 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/docker/docker/api/types/volume"
-	"github.com/stretchr/testify/assert"
+	"github.com/moby/moby/client"
 )
 
 func TestGetContainer(t *testing.T) {
@@ -107,20 +106,28 @@ func TestListVolumesAt(t *testing.T) {
 	// Prepare by creating a volume to test against
 	volName := "testvolume"
 	ctx := context.Background()
-	_, err = docker.cli.VolumeCreate(ctx, volume.CreateOptions{Name: volName, Driver: "local"})
-	assert.NoError(t, err, "should be able to create a volume")
+	_, err = docker.cli.VolumeCreate(ctx, client.VolumeCreateOptions{Name: volName, Driver: "local"})
+	if err != nil {
+		t.Fatalf("should be able to create a volume: %v", err)
+	}
 
 	// Clean up after test
 	defer func() {
-		err := docker.cli.VolumeRemove(ctx, volName, true)
-		assert.NoError(t, err, "should be able to remove the volume")
+		_, err := docker.cli.VolumeRemove(ctx, volName, client.VolumeRemoveOptions{Force: true})
+		if err != nil {
+			t.Fatalf("should be able to remove the volume: %v", err)
+		}
 	}()
 
 	// Test the function
 	mountPoint := filepath.Join("/var/lib/docker/volumes/", volName, "_data")
 	volumes, err := docker.ListVolumesAt(mountPoint)
-	assert.NoError(t, err, "should not have an error listing volumes")
-	assert.True(t, len(volumes) > 0, "should find at least one volume")
+	if err != nil {
+		t.Fatalf("should not have an error listing volumes: %v", err)
+	}
+	if len(volumes) == 0 {
+		t.Fatalf("should have at least one volume")
+	}
 	found := false
 	for _, vol := range volumes {
 		if vol.Name == volName && vol.Mountpoint == mountPoint {
@@ -128,7 +135,9 @@ func TestListVolumesAt(t *testing.T) {
 			break
 		}
 	}
-	assert.True(t, found, "should find the test volume in the filtered list")
+	if !found {
+		t.Fatalf("should have found volume %s in %s", volName, mountPoint)
+	}
 }
 
 func TestDockerConnectDelay(t *testing.T) {
@@ -138,7 +147,7 @@ func TestDockerConnectDelay(t *testing.T) {
 	maxDelay := 500 * time.Millisecond
 	delayCh := make(chan time.Duration, numWorkers)
 
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		wg.Add(1)
 		go dockerConnectWorker(&wg, delayCh)
 	}
@@ -146,7 +155,7 @@ func TestDockerConnectDelay(t *testing.T) {
 	wg.Wait()
 
 	sum := 0 * time.Second
-	for i := 0; i < numWorkers; i++ {
+	for range numWorkers {
 		sum += <-delayCh
 	}
 	avg := sum / time.Duration(numWorkers)

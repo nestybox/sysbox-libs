@@ -1,21 +1,20 @@
 package containerdUtils
 
 import (
-	"io/ioutil"
 	"os"
 	"testing"
 )
 
 func TestGetDataRoot(t *testing.T) {
 	tests := []struct {
-		name           string
-		configPath     string
-		configContent  string
-		expectedRoot   string
-		expectError    bool
+		name          string
+		configPath    string
+		configContent string
+		expectedRoot  string
+		expectError   bool
 	}{
 		{
-			name: "Config with root entry",
+			name:       "Config with root entry",
 			configPath: "/etc/containerd/containerd.toml",
 			configContent: `
 version = 2
@@ -41,7 +40,7 @@ imports = ["/etc/containerd/runtime_*.toml", "./debug.toml"]
 			expectError:  false,
 		},
 		{
-			name: "Config without root entry",
+			name:       "Config without root entry",
 			configPath: "/etc/containerd/config.toml",
 			configContent: `
 version = 2
@@ -74,7 +73,7 @@ imports = ["/etc/containerd/runtime_*.toml", "./debug.toml"]
 
 			// Create a temporary config file if content is provided
 			if tt.configContent != "" {
-				tmpFile, err := ioutil.TempFile("", "config-*.toml")
+				tmpFile, err := os.CreateTemp("", "config-*.toml")
 				if err != nil {
 					t.Fatalf("Failed to create temp file: %v", err)
 				}

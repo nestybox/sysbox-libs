@@ -1,13 +1,14 @@
 //
 // Copyright: (C) 2024 Nestybox Inc.  All rights reserved.
 //
+
 package containerdUtils
 
 import (
 	"fmt"
 	"os"
 
-	"github.com/BurntSushi/toml"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // Location of containerd config file
@@ -53,7 +54,7 @@ func parseDataRoot(path string) (string, error) {
 	defer f.Close()
 
 	// parse the "root"
-	if _, err := toml.NewDecoder(f).Decode(&config); err != nil {
+	if err := toml.NewDecoder(f).Decode(&config); err != nil {
 		return "", fmt.Errorf("could not decode %s: %w", path, err)
 	}
 
