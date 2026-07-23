@@ -179,25 +179,29 @@ func (d *Docker) ListVolumesAt(mountPoint string) ([]volume.Volume, error) {
 }
 
 // ContainerIsDocker returns true if the given container ID corresponds to a
-// Docker container. It does this by first trying to query Docker for the
-// container. If this doesn't work, it uses a heuristic based on the container's
-// rootfs.
+// Docker container. It first checks the container's rootfs, which is cheap and
+// local; only if that is inconclusive does it query the Docker daemon.
 func ContainerIsDocker(id, rootfs string) (bool, error) {
 
-	docker, err := DockerConnect()
-	if err == nil {
-		defer docker.Disconnect()
-		_, err := docker.ContainerGetImageID(id)
-		return (err == nil), nil
+	// Prefer the rootfs heuristic: it avoids a Docker API query that can block
+	// for seconds while Docker is unresponsive, which happens exactly when
+	// containers are restored after a reboot (containers launched with
+	// "--restart"; see Sysbox issue #184).
+	isDocker, err := isDockerRootfs(rootfs)
+	if err == nil && isDocker {
+		return true, nil
 	}
 
-	// The connection to Docker can fail when containers are restarted
-	// automatically after reboot (i.e., containers originally launched with
-	// "--restart"); Docker won't respond until those are up. See Sysbox issue
-	// #184. In this case we determine if the container is a Docker container by
-	// examining the container's rootfs.
+	// The rootfs check was negative or errored; ask Docker directly.
+	docker, derr := DockerConnect()
+	if derr == nil {
+		defer docker.Disconnect()
+		_, gerr := docker.ContainerGetImageID(id)
+		return (gerr == nil), nil
+	}
 
-	return isDockerRootfs(rootfs)
+	// Docker is unreachable; fall back to the rootfs heuristic result.
+	return isDocker, err
 }
 
 // isDockerRootfs determines if the given a container rootfs is for a Docker container.
