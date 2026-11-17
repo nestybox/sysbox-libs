@@ -254,6 +254,11 @@ func KernelModSupported(mod string) (bool, error) {
 
 	f, err := os.Open(filename)
 	if err != nil {
+		// A kernel built without module support (no CONFIG_MODULES) has no
+		// /proc/modules at all; that means no module is loaded, not an error.
+		if os.IsNotExist(err) {
+			return false, nil
+		}
 		return false, err
 	}
 	defer f.Close()
